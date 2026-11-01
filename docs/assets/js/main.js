@@ -10,7 +10,7 @@
   const TYPE = { neuf: 'Neuf', occasion: 'Occasion' };
   const STATUT = { disponible: 'Disponible', reserve: 'Réservé', vendu: 'Vendu' };
   const ETAT = { neuf: 'Neuf', excellent: 'Excellent', bon: 'Bon', correct: 'Correct' };
-  const CAT = { super: 'Supercar', sportive: 'Sportive', coupe: 'Coupé', berline: 'Berline', suv: 'SUV', moto: 'Moto', utilitaire: 'Utilitaire', autre: 'Autre' };
+  const CAT = { super: 'Supercar', sportive: 'Sportive', coupe: 'Coupé', berline: 'Berline', suv: 'SUV', moto: 'Moto', utilitaire: 'Utilitaire', bateau: 'Bateau', autre: 'Autre' };
   const prix = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 });
   const nombre = new Intl.NumberFormat('fr-FR');
 
@@ -183,7 +183,7 @@
   function rendreAccueil() {
     const dispo = vehicules.filter(v => v.statut !== 'vendu' && enLigne(v));
     rendreCarrousel(dispo.filter(v => v.en_avant));
-    const recents = [...dispo].sort((a, b) => (b.arrivee || '').localeCompare(a.arrivee || '')).slice(0, 6);
+    const recents = dispo.filter(v => !v.gamme).sort((a, b) => (b.arrivee || '').localeCompare(a.arrivee || '')).slice(0, 6);
     $('#arrivages').replaceChildren(...recents.map(carte));
   }
 
@@ -346,12 +346,19 @@
       tuiles: ['Véhicules en stock', 'Valeur du stock', 'Réservés'],
       registres: [{
         titre: 'Parc', colonnes: () => ['Réf.', 'Véhicule', 'Type', 'Origine', ...(estResponsable() ? ["Prix d'achat"] : []), 'Prix de vente', ...(estResponsable() ? ['Marge'] : []), 'Statut', 'Arrivée', 'Catalogue', ...(estResponsable() ? ['Annonce', 'Supprimer'] : [])], vide: 'Aucun véhicule en stock pour le moment.',
-        lignes: () => [...vehicules].sort((a, b) => (b.arrivee || '').localeCompare(a.arrivee || '')).map(v => [
+        lignes: () => vehicules.filter(v => !v.gamme).sort((a, b) => (b.arrivee || '').localeCompare(a.arrivee || '')).map(v => [
           v.id.toUpperCase(), nomV(v), TYPE[v.type], v.rachat ? 'Rachat' : v.stockInitial ? 'Ajout manuel' : 'Concession',
           ...(estResponsable() ? [v.prixAchat ? prix.format(v.prixAchat) : '—'] : []), prix.format(v.prix), ...(estResponsable() ? [v.prixAchat ? texteMarge(v.prix, v.prixAchat) : '—'] : []), STATUT[v.statut] || v.statut,
           v.arrivee ? new Date(v.arrivee + 'T12:00').toLocaleDateString('fr-FR') : '—',
           publication(v, 'espace-stock'),
           ...(estResponsable() ? [boutonModifier(v), boutonSuppression(v)] : []),
+        ]),
+      }, {
+        titre: 'Gamme neuve (une annonce par modèle au catalogue)', vide: 'Aucun véhicule dans la gamme neuve.',
+        colonnes: () => ['Réf.', 'Véhicule', 'Catégorie', 'Prix de vente', 'Coût concession (85 %)', 'Photo', 'Catalogue', ...(estResponsable() ? ['Annonce', 'Supprimer'] : [])],
+        lignes: () => vehicules.filter(v => v.gamme).sort((a, b) => a.prix - b.prix || nomV(a).localeCompare(nomV(b), 'fr')).map(v => [
+          v.id.toUpperCase(), nomV(v), CAT[v.categorie] || v.categorie, prix.format(v.prix), prix.format(Math.round(v.prix * PART_COUT_CONCESSION / 100)),
+          v.image ? 'Oui' : '—', publication(v, 'espace-stock'), ...(estResponsable() ? [boutonModifier(v), boutonSuppression(v)] : []),
         ]),
       }],
     },
@@ -1425,6 +1432,8 @@
   /* Coût d'une vente : occasion = prix d'achat (rachat déjà en dépense) ; neuf = 85 % du prix neuf (dépense ajoutée à la validation) */
   function beneficeVente(nomVehicule, prixVente, categorie) {
     const n = (nomVehicule || '').trim().toLowerCase();
+    const g = categorie === 'neuf' && vehicules.find(v => v.gamme && nomV(v).toLowerCase() === n);
+    if (g) return { cout: Math.round(g.prix * PART_COUT_CONCESSION / 100), source: `coût concession (${PART_COUT_CONCESSION} % du prix de la gamme)` };
     const st = categorie !== 'neuf' && vehicules.find(v => nomV(v).toLowerCase() === n && v.prixAchat);
     if (st) return { cout: st.prixAchat, source: "prix d'achat (stock)" };
     const ref = (prixNeufsCache || []).find(x => x.n.toLowerCase() === n);
@@ -3001,7 +3010,32 @@
     });
     zone.append(labStock, stock);
     type.closest('.champ').after(zone);
-    const majZone = () => { zone.hidden = type.value !== 'occasion'; if (zone.hidden) stock.value = ''; };
+    /* Neuf : uniquement les modèles de la gamme ; remplit modèle et prix */
+    const gamme = vehicules.filter(v => v.gamme && v.statut !== 'vendu').sort((a, b) => a.prix - b.prix || nomVehicule(a).localeCompare(nomVehicule(b), 'fr'));
+    const zoneNeuf = el('div', 'champ');
+    const labGamme = el('label', null, 'Véhicule neuf (gamme)');
+    labGamme.htmlFor = 'v-gamme';
+    const choixGamme = el('select');
+    choixGamme.id = 'v-gamme';
+    choixGamme.append(el('option', null, gamme.length ? '— Choisir dans la gamme —' : 'Gamme neuve vide'));
+    choixGamme.options[0].value = '';
+    gamme.forEach(v => { const o = el('option', null, `${nomVehicule(v)} · ${prix.format(v.prix)}`); o.value = v.id; choixGamme.append(o); });
+    zoneNeuf.append(labGamme, choixGamme);
+    zone.after(zoneNeuf);
+    choixGamme.addEventListener('change', () => {
+      const v = vehicules.find(x => x.id === choixGamme.value);
+      if (!v) return;
+      sel.value = nomVehicule(v);
+      montant.value = v.prix;
+      prixAuto = String(v.prix);
+      majAide();
+    });
+    const majZone = () => {
+      zone.hidden = type.value !== 'occasion';
+      if (zone.hidden) stock.value = '';
+      zoneNeuf.hidden = type.value !== 'neuf' || !gamme.length;
+      if (zoneNeuf.hidden) choixGamme.value = '';
+    };
     stock.addEventListener('change', () => {
       const v = vehicules.find(x => x.id === stock.value);
       if (!v) return;
@@ -3051,9 +3085,16 @@
         f.querySelector('[aria-invalid="true"]').focus();
         return;
       }
+      const duGamme = type.value === 'neuf' && (vehicules.find(x => x.id === choixGamme.value) || gamme.find(x => nomVehicule(x).toLowerCase() === sel.value.trim().toLowerCase()));
+      if (type.value === 'neuf' && gamme.length && !duGamme) {
+        msg.className = 'form-message erreur';
+        msg.textContent = 'Vente de neuf : choisis le véhicule dans la liste de la gamme.';
+        choixGamme.focus();
+        return;
+      }
       const duStock = type.value === 'occasion' && vehicules.find(x => x.id === stock.value);
       const cout = duStock && duStock.prixAchat ? { cout: duStock.prixAchat, source: `prix d'achat (${duStock.id.toUpperCase()})` } : beneficeVente(sel.value, Number(montant.value), type.value);
-      ventesApercu.unshift({ categorie: type.value, ...(duStock ? { vehiculeId: duStock.id } : {}), vendeur: identifiant, poste: posteApercu, date: new Date(), client: client.value.trim(), vehicule: sel.value.trim(), plaque: plaque.value.trim(), prix: Number(montant.value), cout: cout.cout, source: cout.source, benefice: Number(montant.value) - cout.cout, statut: 'attente' });
+      ventesApercu.unshift({ categorie: type.value, ...(duStock ? { vehiculeId: duStock.id } : {}), ...(duGamme ? { gammeId: duGamme.id } : {}), vendeur: identifiant, poste: posteApercu, date: new Date(), client: client.value.trim(), vehicule: sel.value.trim(), plaque: plaque.value.trim(), prix: Number(montant.value), cout: cout.cout, source: cout.source, benefice: Number(montant.value) - cout.cout, statut: 'attente' });
       journal('Ventes', 'Nouvelle vente', `${sel.value.trim()} · ${client.value.trim()} · ${prix.format(Number(montant.value))}`);
       rendreEspace('espace-ventes');
       const m = $('#v-message');
