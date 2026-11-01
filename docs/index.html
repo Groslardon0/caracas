@@ -394,6 +394,10 @@
         <input id="v-client" type="text" autocomplete="off" placeholder="ex. Travis Cole">
       </div>
       <div class="champ">
+        <label for="v-type">Type de vente</label>
+        <select id="v-type"><option value="neuf">Véhicule neuf</option><option value="occasion">Véhicule d'occasion</option></select>
+      </div>
+      <div class="champ">
         <label for="v-vehicule">Véhicule</label>
         <input id="v-vehicule" type="text" list="v-vehicules-liste" autocomplete="off" placeholder="Marque ou modèle">
         <datalist id="v-vehicules-liste"></datalist>
@@ -408,6 +412,7 @@
       </div>
     </div>
     <div class="form-pied">
+      <p class="calcul-detail" id="v-aide"></p>
       <p class="form-message" id="v-message" role="status"></p>
       <button class="btn" type="submit">Enregistrer la vente</button>
     </div>

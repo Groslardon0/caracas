@@ -315,13 +315,13 @@
       }],
       registres: [{
         titre: 'Registre des ventes', vide: 'Aucune vente enregistrée.',
-        colonnes: () => ['Date', 'Client', 'Véhicule', 'Plaque', 'Vendeur', 'Prix', ...(estResponsable() ? ['Bénéfice'] : []), 'Statut', ...(estResponsable() ? ['Validation'] : [])],
+        colonnes: () => ['Date', 'Client', 'Véhicule', 'Type', 'Plaque', 'Vendeur', 'Prix', ...(estResponsable() ? ['Bénéfice'] : []), 'Statut', ...(estResponsable() ? ['Validation'] : [])],
         note: () => {
           const n = ventesApercu.filter(v => v.statut === 'attente').length;
           return estResponsable() && n ? `${n} vente${n > 1 ? 's' : ''} à valider` : '';
         },
         lignes: () => ventesApercu.map(v => {
-          const cells = [fmtDate(v.date), v.client, v.vehicule, v.plaque, v.vendeur || '—', prix.format(v.prix), ...(estResponsable() ? [prix.format(v.benefice || 0)] : []), celluleStatut(v)];
+          const cells = [fmtDate(v.date), v.client, v.vehicule, { neuf: 'Neuf', occasion: 'Occasion' }[v.categorie] || '—', v.plaque, v.vendeur || '—', prix.format(v.prix), ...(estResponsable() ? [prix.format(v.benefice || 0)] : []), celluleStatut(v)];
           if (estResponsable()) cells.push(actionsVente(v));
           return cells;
         }),
@@ -339,12 +339,13 @@
       }],
     },
     'espace-stock': {
+      stockManuel: true,
       titre: 'Stock', intro: 'Les véhicules du parc. Ceux marqués « en vente » apparaîtront dans le catalogue public.',
       tuiles: ['Véhicules en stock', 'Valeur du stock', 'Réservés'],
       registres: [{
-        titre: 'Parc', action: 'Ajouter un véhicule', colonnes: () => ['Réf.', 'Véhicule', 'Type', 'Origine', ...(estResponsable() ? ["Prix d'achat"] : []), 'Prix de vente', ...(estResponsable() ? ['Marge'] : []), 'Statut', 'Arrivée', 'Catalogue', ...(estResponsable() ? ['Supprimer'] : [])], vide: 'Aucun véhicule en stock pour le moment.',
+        titre: 'Parc', colonnes: () => ['Réf.', 'Véhicule', 'Type', 'Origine', ...(estResponsable() ? ["Prix d'achat"] : []), 'Prix de vente', ...(estResponsable() ? ['Marge'] : []), 'Statut', 'Arrivée', 'Catalogue', ...(estResponsable() ? ['Supprimer'] : [])], vide: 'Aucun véhicule en stock pour le moment.',
         lignes: () => [...vehicules].sort((a, b) => (b.arrivee || '').localeCompare(a.arrivee || '')).map(v => [
-          v.id.toUpperCase(), nomV(v), TYPE[v.type], v.rachat ? 'Rachat' : 'Concession',
+          v.id.toUpperCase(), nomV(v), TYPE[v.type], v.rachat ? 'Rachat' : v.stockInitial ? 'Ajout manuel' : 'Concession',
           ...(estResponsable() ? [v.prixAchat ? prix.format(v.prixAchat) : '—'] : []), prix.format(v.prix), ...(estResponsable() ? [v.prixAchat ? texteMarge(v.prix, v.prixAchat) : '—'] : []), STATUT[v.statut] || v.statut,
           v.arrivee ? new Date(v.arrivee + 'T12:00').toLocaleDateString('fr-FR') : '—',
           publication(v, 'espace-stock'),
@@ -389,10 +390,11 @@
       titre: 'Paramètres', intro: "Réglages de l'entreprise utilisés dans tout l'espace employé.",
       reglages: [
         { titre: 'Entreprise', champs: [['Nom', 'Le Caracas'], ['Adresse', 'Sandy Shores, Blaine County'], ['Téléphone en jeu', ''], ['Horaires', '']] },
-        { titre: 'Ventes', champs: [['Devise', '$'], ['Commission vendeur (%)', '']] },
+        { titre: 'Ventes', champs: [['Devise', '$']] },
         { titre: 'Paie', champs: [['Taux horaire par défaut', ''], ['Jour de paie', '']] },
       ],
       marge: true,
+      remuneration: true,
       prixVehicules: true,
     },
     'espace-badgeuse': {
@@ -408,15 +410,15 @@
     'espace-equipe': {
       titre: 'Équipe', intro: 'Les membres du Caracas : identité, téléphone, RIB et rôle. La roue crantée devant chaque employé permet de modifier sa fiche.',
       tuiles: [
-        { label: 'Employés', valeur: () => String(equipeApercu.length), note: () => `${equipeApercu.filter(e => POSTES.find(p => p.id === e.poste && p.responsable)).length} responsable(s)` },
-        { label: 'En service maintenant', valeur: () => String(equipeApercu.filter(e => serviceOuvert(nomComplet(e))).length), note: () => 'Selon la badgeuse' },
-        { label: 'Embauches du mois', valeur: () => { const m = new Date(); return String(equipeApercu.filter(e => e.embauche.getMonth() === m.getMonth() && e.embauche.getFullYear() === m.getFullYear()).length); }, note: () => 'Ajoutés ce mois-ci' },
+        { label: 'Employés', valeur: () => String(equipeVisible().length), note: () => `${equipeVisible().filter(e => POSTES.find(p => p.id === e.poste && p.responsable)).length} responsable(s)` },
+        { label: 'En service maintenant', valeur: () => String(equipeVisible().filter(e => serviceOuvert(nomComplet(e))).length), note: () => 'Selon la badgeuse' },
+        { label: 'Embauches du mois', valeur: () => { const m = new Date(); return String(equipeVisible().filter(e => e.embauche.getMonth() === m.getMonth() && e.embauche.getFullYear() === m.getFullYear()).length); }, note: () => 'Ajoutés ce mois-ci' },
       ],
       equipe: true,
       registres: [
         {
-          titre: 'Postes', colonnes: ['Poste', 'Taux horaire', 'Commission', 'Accès'], vide: 'Aucun poste défini.',
-          lignes: () => POSTES.map(x => [x.nom, prix.format(x.taux) + ' / h', x.commission + ' %', x.responsable ? 'Responsable : valide les ventes, voit le détail des calculs' : 'Employé']),
+          titre: 'Postes', colonnes: ['Poste', 'Rémunération', 'Commission', 'Salaire max', 'Accès'], vide: 'Aucun poste défini.',
+          lignes: () => postesVisibles().map(x => [x.nom, x.fixe ? `${prix.format(x.fixe)} / semaine (fixe)` : prix.format(x.taux) + ' / h', x.sansCommission ? 'Non commissionné' : x.commission + ' %', x.max ? prix.format(x.max) + ' / semaine' : '—', niveau(x.id) >= 2 ? 'Direction (accès du patron)' : x.responsable ? 'Responsable : valide les ventes, voit le détail des calculs' : 'Employé']),
         },
       ],
     },
@@ -493,13 +495,28 @@
   let horlogeTimer = null;
 
   /* Postes du Caracas (commission en % ; responsable = valide les ventes et voit le détail des calculs) */
+  /* max = salaire maximum par semaine ; fixe = salaire fixe par semaine (comptable, non commissionné) ;
+     cache = compte admin invisible dans les listes d'employés */
   const POSTES = [
-    { id: 'patron', nom: 'Patron', commission: 70, taux: 1100, responsable: true },
-    { id: 'copatron', nom: 'Co-patron', commission: 70, taux: 1100, responsable: true },
-    { id: 'manager', nom: 'Manager', commission: 60, taux: 950, responsable: true },
-    { id: 'vendeur', nom: 'Vendeur', commission: 40, taux: 800 },
-    { id: 'stagiaire', nom: 'Stagiaire', commission: 30, taux: 650 },
+    { id: 'admin', nom: 'Admin', commission: 0, taux: 0, max: 0, responsable: true, cache: true },
+    { id: 'patron', nom: 'Patron', commission: 70, taux: 1100, max: 100000, responsable: true },
+    { id: 'copatron', nom: 'Co-patron', commission: 70, taux: 1100, max: 90000, responsable: true },
+    { id: 'comptable', nom: 'Comptable', commission: 0, taux: 0, fixe: 60000, max: 60000, responsable: true, sansCommission: true },
+    { id: 'manager', nom: 'Manager', commission: 60, taux: 950, max: 75000, responsable: true },
+    { id: 'vendeur', nom: 'Vendeur', commission: 40, taux: 800, max: 60000 },
+    { id: 'stagiaire', nom: 'Stagiaire', commission: 30, taux: 650, max: 60000 },
   ];
+  /* Niveau d'accès : admin > patron et comptable (mêmes accès) > les autres */
+  const NIVEAU = { admin: 3, patron: 2, comptable: 2 };
+  const niveau = id => NIVEAU[id] || 1;
+  const estCache = e => e.poste === 'admin';
+  const equipeVisible = () => equipeApercu.filter(e => !estCache(e));
+  const postesVisibles = () => POSTES.filter(p => !p.cache);
+  const appliquerPostes = l => (l || []).forEach(o => {
+    const p = POSTES.find(x => x.id === o.id);
+    if (p) ['taux', 'commission', 'max', 'fixe'].forEach(k => { if (o[k] >= 0) p[k] = o[k]; });
+  });
+  const etatPostes = () => POSTES.map(p => ({ id: p.id, taux: p.taux, commission: p.commission, max: p.max, fixe: p.fixe }));
   const ICONE_ROUE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
   /* Taux horaire du grade et gain d'un pointage (heures × taux) */
   const tauxDe = id => (POSTES.find(x => x.id === id) || {}).taux || 0;
@@ -524,7 +541,7 @@
   const fmtDate = d => d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   const pageEspace = () => (ESPACE[location.hash.slice(1)] ? location.hash.slice(1) : 'espace');
   const selPoste = $('#esp-poste');
-  POSTES.forEach(x => { const o = el('option', null, x.nom); o.value = x.id; selPoste.append(o); });
+  postesVisibles().forEach(x => { const o = el('option', null, x.nom); o.value = x.id; selPoste.append(o); });
   selPoste.value = posteApercu;
   function majRole() {
     $('#esp-qui').textContent = `${identifiant || 'Aperçu'} · ${posteCourant().nom}${compteConnecte ? '' : ' (aperçu)'}`;
@@ -575,9 +592,15 @@
     d.append(ok, non);
     return d;
   }
+  const CAT_ACHAT_NEUF = 'Achat véhicule neuf (coût garage)';
   function decider(v, statut) {
     v.statut = statut;
     v.decisionLe = new Date();
+    /* Vente de neuf validée : le coût d'achat du garage (85 % du prix neuf) part en dépense automatique */
+    if (statut === 'validee' && v.categorie === 'neuf' && v.cout > 0 && !v.depenseAuto) {
+      depensesApercu.unshift({ n: depensesApercu.length, date: new Date(), categorie: CAT_ACHAT_NEUF, libelle: `${v.vehicule} · ${v.plaque} · ${v.client}`, montant: v.cout, par: identifiant, lien: 'neuf' });
+      v.depenseAuto = true;
+    }
     journal('Ventes', statut === 'validee' ? 'Validation' : 'Refus', `${'plaque' in v ? 'Vente' : 'Contrat'} ${v.vehicule} · ${v.client} · ${prix.format(v.prix)}`);
     rendreEspace('espace-ventes');
   }
@@ -1160,8 +1183,9 @@
 
   /* Roue crantée (direction) : taux horaires par grade */
   const dlgTaux = $('#dlg-taux');
+  const POSTES_HORAIRES = () => POSTES.filter(x => !x.cache && !x.fixe);
   function ouvrirTaux() {
-    $('#taux-liste').replaceChildren(...POSTES.map(x => {
+    $('#taux-liste').replaceChildren(...POSTES_HORAIRES().map(x => {
       const d = el('div', 'champ taux-ligne');
       const l = el('label', null, x.nom);
       l.htmlFor = 'taux-' + x.id;
@@ -1183,14 +1207,14 @@
   dlgTaux.addEventListener('click', e => { if (e.target === dlgTaux) dlgTaux.close(); });
   $('#form-taux').addEventListener('submit', e => {
     e.preventDefault();
-    const valeurs = POSTES.map(x => Number($('#taux-' + x.id).value));
+    const valeurs = POSTES_HORAIRES().map(x => Number($('#taux-' + x.id).value));
     if (valeurs.some(v => !(v >= 0) || !Number.isFinite(v))) {
       $('#taux-message').className = 'form-message erreur';
       $('#taux-message').textContent = 'Chaque taux doit être un nombre positif.';
       return;
     }
-    POSTES.forEach((x, i) => { x.taux = Math.round(valeurs[i]); });
-    journal('Paie', 'Taux horaires modifiés', POSTES.map(x => `${x.nom} ${prix.format(x.taux)}`).join(', '));
+    POSTES_HORAIRES().forEach((x, i) => { x.taux = Math.round(valeurs[i]); });
+    journal('Paie', 'Taux horaires modifiés', POSTES_HORAIRES().map(x => `${x.nom} ${prix.format(x.taux)}`).join(', '));
     dlgTaux.close();
     rendreEspace(pageEspace());
   });
@@ -1323,9 +1347,10 @@
   let periodePaie = 'semaine';
   let employePaie = null;
   let ongletPaie = 'ma';
-  function beneficeVente(nomVehicule, prixVente) {
+  /* Coût d'une vente : occasion = prix d'achat (rachat déjà en dépense) ; neuf = 85 % du prix neuf (dépense ajoutée à la validation) */
+  function beneficeVente(nomVehicule, prixVente, categorie) {
     const n = (nomVehicule || '').trim().toLowerCase();
-    const st = vehicules.find(v => nomV(v).toLowerCase() === n && v.prixAchat);
+    const st = categorie !== 'neuf' && vehicules.find(v => nomV(v).toLowerCase() === n && v.prixAchat);
     if (st) return { cout: st.prixAchat, source: "prix d'achat (stock)" };
     const ref = (prixNeufsCache || []).find(x => x.n.toLowerCase() === n);
     if (ref) return { cout: Math.round(ref.p * PART_COUT_CONCESSION / 100), source: `prix concession (${PART_COUT_CONCESSION} % du neuf)` };
@@ -1338,8 +1363,10 @@
     const emp = {};
     const fiche = nom => {
       const k = Object.keys(emp).find(n => memeNom(n, nom)) || nom;
-      return emp[k] = emp[k] || { nom: k, poste: null, ms: 0, salaireHoraire: 0, ventes: [], benefice: 0, commission: 0, attente: 0 };
+      return emp[k] = emp[k] || { nom: k, poste: null, ms: 0, salaireHoraire: 0, fixe: 0, ventes: [], benefice: 0, commission: 0, primes: 0, listePrimes: [], attente: 0 };
     };
+    /* Tous les employés de l'équipe apparaissent, même sans activité sur la période */
+    equipeVisible().forEach(e => { fiche(nomComplet(e)).posteEquipe = e.poste; });
     pointagesApercu.filter(x => dans(x.debut)).forEach(x => {
       const f = fiche(x.nom);
       f.ms += (x.fin || new Date()) - x.debut;
@@ -1357,12 +1384,24 @@
         f.benefice += v.benefice;
         f.commission += com;
       });
+    primesApercu.filter(p => dans(p.semaine)).forEach(p => {
+      const f = fiche(p.nom);
+      f.primes += p.montant;
+      f.listePrimes.push(p);
+    });
+    /* Nombre de semaines de la période (salaire fixe et salaire max sont hebdomadaires) */
+    const nbSem = per.cle ? 1 : Math.max(1, semainesConnues().filter(p => p.debut >= per.debut && p.debut < per.fin).length);
     return Object.values(emp).map(f => {
-      f.poste = f.poste || 'vendeur';
-      f.total = f.salaireHoraire + f.commission;
+      f.poste = f.posteEquipe || f.poste || 'vendeur';
+      const P = POSTES.find(p => p.id === f.poste) || {};
+      f.fixe = P.fixe ? P.fixe * nbSem : 0;
+      f.brut = f.salaireHoraire + f.fixe + f.commission + f.primes;
+      f.plafond = P.max ? P.max * nbSem : 0;
+      f.total = f.plafond ? Math.min(f.brut, f.plafond) : f.brut;
+      f.plafonne = f.brut > f.total;
       f.paye = paiesApercu.find(p => p.cle === per.cle && memeNom(p.nom, f.nom));
       return f;
-    }).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+    }).filter(f => f.poste !== 'admin').sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
   }
 
   function periodeSemaine(decalage) {
@@ -1393,7 +1432,7 @@
     d.append(el('p', 'tuile-label', label), el('p', 'tuile-valeur', valeur), el('p', 'tuile-note', note));
     return d;
   };
-  const vide = () => ({ ms: 0, salaireHoraire: 0, ventes: [], benefice: 0, commission: 0, total: 0, attente: 0, poste: posteApercu });
+  const vide = () => ({ ms: 0, salaireHoraire: 0, fixe: 0, ventes: [], benefice: 0, commission: 0, primes: 0, listePrimes: [], brut: 0, plafond: 0, plafonne: false, total: 0, attente: 0, poste: posteApercu });
   const etatPaiement = f => {
     if (!f.paye) return f.total > 0 ? el('span', 'pastille pastille-attente', 'À payer') : '—';
     const s = el('span', 'pastille pastille-validee', 'Payé');
@@ -1422,9 +1461,9 @@
         rendreEspace('espace-paie');
       });
     }
-    return [nom, (POSTES.find(x => x.id === f.poste) || {}).nom || f.poste, fmtDuree(f.ms), prix.format(f.salaireHoraire),
+    return [nom, (POSTES.find(x => x.id === f.poste) || {}).nom || f.poste, fmtDuree(f.ms), f.fixe ? `${prix.format(f.fixe)} (fixe)` : prix.format(f.salaireHoraire),
       String(f.ventes.length) + (f.attente ? ` (+${f.attente} en attente)` : ''), prix.format(f.benefice),
-      `${prix.format(f.commission)} (${commissionDe(f.poste)} %)`, prix.format(f.total), action, docsPaie(f, per)];
+      f.fixe && !f.commission ? '—' : `${prix.format(f.commission)} (${commissionDe(f.poste)} %)`, f.primes ? prix.format(f.primes) : '—', celluleTotal(f), action, docsPaie(f, per)];
   }
   function docsPaie(f, per) {
     const d = el('div', 'actions-ligne');
@@ -1440,7 +1479,15 @@
       prix.format(v.benefice), `${prix.format(v.com)} (${v.taux} %)`,
     ]), 'Aucune vente validée sur la semaine.'), fermer);
   }
-  const COLS_EMPLOYES = ['Employé', 'Grade', 'Heures', 'Salaire horaire', 'Ventes validées', 'Bénéfice', 'Commission', 'Total', 'Paiement', 'Documents'];
+  const COLS_EMPLOYES = ['Employé', 'Grade', 'Heures', 'Salaire', 'Ventes validées', 'Bénéfice', 'Commission', 'Primes', 'Total', 'Paiement', 'Documents'];
+  function celluleTotal(f) {
+    if (!f.plafonne) return prix.format(f.total);
+    const d = el('div', 'actions-ligne');
+    const p = el('span', 'pastille pastille-attente', 'Plafond');
+    p.title = `Brut ${prix.format(f.brut)}, plafonné au salaire max du rôle (${prix.format(f.plafond)})`;
+    d.append(el('span', null, prix.format(f.total)), p);
+    return d;
+  }
 
   function blocsPaie() {
     const blocs = [];
@@ -1459,9 +1506,9 @@
         const f = fiches.find(x => memeNom(x.nom, identifiant)) || vide();
         t.append(
           tuile('Heures pointées', fmtDuree(f.ms), `${prix.format(tauxDe(f.poste))} / h`),
-          tuile('Salaire horaire', prix.format(f.salaireHoraire), '15 h max / semaine × taux du grade'),
+          f.fixe ? tuile('Salaire fixe', prix.format(f.fixe), 'Comptable : salaire fixe, non commissionné') : tuile('Salaire horaire', prix.format(f.salaireHoraire), '15 h max / semaine × taux du grade'),
           tuile('Commissions', prix.format(f.commission), `${commissionDe(f.poste)} % du bénéfice · ${f.ventes.length} vente(s) validée(s)`),
-          tuile('Total de la semaine', prix.format(f.total), f.paye ? `Payé le ${fmtDate(f.paye.le)}` : 'Pas encore payé'),
+          tuile('Total de la semaine', prix.format(f.total), [f.primes ? `dont ${prix.format(f.primes)} de primes` : '', f.plafonne ? `plafonné au salaire max (${prix.format(f.plafond)})` : '', f.paye ? `payé le ${fmtDate(f.paye.le)}` : 'pas encore payé'].filter(Boolean).join(' · ')),
         );
         blocs.push(t);
         const docs = el('div', 'actions-ligne histo-actions');
@@ -1483,6 +1530,7 @@
       blocs.push(t, panneauAvec('Paie par employé', tableau(COLS_EMPLOYES, fiches.map(f => ligneEmploye(f, per)), 'Aucun pointage ni vente cette semaine.')));
       const f = employePaie && employePaie.cle === per.cle && fiches.find(x => memeNom(x.nom, employePaie.nom));
       if (f) blocs.push(detailEmploye(f, per));
+      blocs.push(panneauPrimes(per, fiches));
       return blocs;
     }
 
@@ -1649,7 +1697,7 @@
     return true;
   }
   function effacerDemo() {
-    [pointagesApercu, ventesApercu, contratsApercu, rachatsApercu, depensesApercu, paiesApercu, ecrituresApercu, cloturesApercu, equipeApercu, comptesApercu, reservationsApercu, vehicules].forEach(t => {
+    [pointagesApercu, ventesApercu, contratsApercu, rachatsApercu, depensesApercu, paiesApercu, ecrituresApercu, cloturesApercu, equipeApercu, comptesApercu, reservationsApercu, primesApercu, vehicules].forEach(t => {
       for (let i = t.length - 1; i >= 0; i -= 1) if (t[i].demo) t.splice(i, 1);
     });
     demoChargee = false;
@@ -1687,6 +1735,125 @@
     const m = vente - achat;
     return `${prix.format(m)} (${achat ? Math.round(m / achat * 1000) / 10 : 0} %)`.replace('.', ',');
   };
+  /* Paramètres (direction) : rémunération par rôle */
+  function panneauRemuneration() {
+    const champ = (valeur, label, desactive) => {
+      const i = el('input', 'pv-input');
+      i.type = 'number';
+      i.min = '0';
+      i.step = '50';
+      i.inputMode = 'numeric';
+      i.value = valeur || 0;
+      i.disabled = !!desactive;
+      i.setAttribute('aria-label', label);
+      return i;
+    };
+    const entrees = postesVisibles().map(p => ({
+      p,
+      taux: champ(p.taux, `Taux horaire ${p.nom}`, p.fixe),
+      commission: champ(p.commission, `Commission ${p.nom} (%)`, p.sansCommission),
+      max: champ(p.max, `Salaire max ${p.nom}`),
+      fixe: p.fixe ? champ(p.fixe, `Salaire fixe ${p.nom}`) : null,
+    }));
+    const msg = el('p', 'form-message');
+    msg.setAttribute('role', 'status');
+    const b = el('button', 'btn btn-sm', 'Enregistrer');
+    b.type = 'button';
+    b.addEventListener('click', () => {
+      const lire = i => Math.round(Number(i.value));
+      if (entrees.some(x => [x.taux, x.commission, x.max, x.fixe].filter(Boolean).some(i => !(lire(i) >= 0)) || lire(x.commission) > 100)) {
+        msg.className = 'form-message erreur';
+        msg.textContent = 'Chaque valeur doit être un nombre positif (commission entre 0 et 100 %).';
+        return;
+      }
+      entrees.forEach(x => {
+        if (!x.p.fixe) x.p.taux = lire(x.taux);
+        if (!x.p.sansCommission) x.p.commission = lire(x.commission);
+        x.p.max = lire(x.max);
+        if (x.fixe) x.p.fixe = lire(x.fixe);
+      });
+      journal('Paramètres', 'Rémunération par rôle', postesVisibles().map(p => `${p.nom} : ${p.fixe ? prix.format(p.fixe) + ' fixe' : prix.format(p.taux) + '/h'}, ${p.sansCommission ? 'sans commission' : p.commission + ' %'}, max ${prix.format(p.max)}`).join(' · '));
+      rendreEspace('espace-parametres');
+      const m = $('#esp-corps .remu-message');
+      if (m) { m.className = 'form-message succes remu-message'; m.textContent = 'Rémunération enregistrée. Elle s’applique aux paies calculées.'; }
+    });
+    msg.classList.add('remu-message');
+    const pied = el('div', 'form-pied');
+    pied.append(msg, b);
+    const p = panneauAvec('Rémunération par rôle', tableau(['Rôle', 'Taux horaire ($/h)', 'Commission (%)', 'Salaire max / semaine ($)', 'Salaire fixe / semaine ($)'],
+      entrees.map(x => [x.p.nom, x.taux, x.commission, x.max, x.fixe || '—']), ''));
+    p.append(el('p', 'calcul-detail panneau-pied', 'Le salaire max plafonne le total de la semaine (heures + commissions + primes). Le comptable a un salaire fixe et n’est pas commissionné.'), pied);
+    return p;
+  }
+
+  /* Paie (direction) : primes de la semaine, motivées par écrit, dans la limite du salaire max du rôle */
+  const primesApercu = [];
+  let primeArmee = null;
+  function panneauPrimes(per, fiches) {
+    const f = el('form', 'form-grille');
+    f.noValidate = true;
+    const ch = (label, input) => { const d = el('div', 'champ'); const l = el('label', null, label); l.htmlFor = input.id; d.append(l, input); f.append(d); return input; };
+    const sel = el('select');
+    sel.id = 'pr-employe';
+    fiches.forEach(x => { const o = el('option', null, `${x.nom} · ${nomPoste(x.poste)}`); o.value = x.nom; sel.append(o); });
+    const montant = el('input');
+    montant.id = 'pr-montant';
+    montant.type = 'number';
+    montant.min = '0';
+    montant.step = '500';
+    montant.inputMode = 'numeric';
+    const motif = el('input');
+    motif.id = 'pr-motif';
+    motif.placeholder = 'ex. Objectif de ventes atteint';
+    motif.autocomplete = 'off';
+    ch('Employé', sel);
+    ch('Montant ($)', montant);
+    ch('Motif (obligatoire)', motif);
+    const aide = el('p', 'calcul-detail');
+    const majAide = () => {
+      const x = fiches.find(y => y.nom === sel.value);
+      aide.textContent = !x ? '' : x.paye ? `La paie de ${x.nom} est déjà versée pour cette semaine.`
+        : x.plafond ? `Marge avant le salaire max (${prix.format(x.plafond)}) : ${prix.format(Math.max(0, x.plafond - x.brut))}.` : '';
+    };
+    sel.addEventListener('change', majAide);
+    majAide();
+    const msg = el('p', 'form-message');
+    msg.setAttribute('role', 'status');
+    const b = el('button', 'btn btn-sm', 'Accorder la prime');
+    b.type = 'submit';
+    const pied = el('div', 'form-pied');
+    pied.append(msg, b);
+    f.addEventListener('submit', ev => {
+      ev.preventDefault();
+      const x = fiches.find(y => y.nom === sel.value);
+      const m = Math.round(Number(montant.value));
+      msg.className = 'form-message erreur';
+      if (!x) { msg.textContent = 'Choisis un employé.'; return; }
+      if (x.paye) { msg.textContent = 'Paie déjà versée cette semaine : la prime ne peut plus être ajoutée.'; return; }
+      if (!(m > 0)) { msg.textContent = 'Indique un montant.'; return; }
+      if (motif.value.trim().length < 5) { msg.textContent = 'Une prime doit être motivée par écrit (5 caractères minimum).'; return; }
+      if (x.plafond && x.brut + m > x.plafond) { msg.textContent = `Prime refusée : elle dépasserait le salaire max du rôle (${prix.format(x.plafond)}). Reste possible : ${prix.format(Math.max(0, x.plafond - x.brut))}.`; return; }
+      primesApercu.unshift({ id: 'pr-' + Date.now().toString(36), nom: x.nom, semaine: per.debut, montant: m, motif: motif.value.trim(), par: identifiant, le: new Date() });
+      journal('Paie', 'Prime accordée', `${x.nom} · ${prix.format(m)} · ${motif.value.trim()} · ${per.libelle}`);
+      rendreEspace('espace-paie');
+    });
+    const lignes = primesApercu.filter(p => p.semaine >= per.debut && p.semaine < per.fin).map(p => {
+      const payee = fiches.some(x => memeNom(x.nom, p.nom) && x.paye);
+      if (payee) return [p.nom, prix.format(p.montant), p.motif, p.par, fmtDate(p.le), el('span', 'pastille pastille-validee', 'Versée')];
+      const arme = primeArmee === p;
+      const k = el('button', 'btn btn-mini' + (arme ? ' btn-danger' : ' btn-ghost'), arme ? 'Confirmer' : 'Retirer');
+      k.type = 'button';
+      k.addEventListener('click', () => {
+        if (!arme) { primeArmee = p; } else { primesApercu.splice(primesApercu.indexOf(p), 1); primeArmee = null; journal('Paie', 'Prime retirée', `${p.nom} · ${prix.format(p.montant)} · ${p.motif}`); }
+        rendreEspace('espace-paie');
+      });
+      return [p.nom, prix.format(p.montant), p.motif, p.par, fmtDate(p.le), k];
+    });
+    const p = panneauAvec(`Primes · semaine ${per.libelle}`, tableau(['Employé', 'Montant', 'Motif', 'Accordée par', 'Le', ''], lignes, 'Aucune prime cette semaine.'));
+    p.append(f, aide, pied);
+    return p;
+  }
+
   function panneauMarge() {
     const corps = el('form', 'form-grille marge-form');
     corps.noValidate = true;
@@ -1867,7 +2034,7 @@
 
   let depenseASupprimer = null;
   let depenseEnEdition = null;
-  const estPatron = () => posteApercu === 'patron';
+  const estPatron = () => niveau(posteApercu) >= 2;
   function celluleJustif(x) {
     if (!x.justif) return '—';
     return vignetteImage({
@@ -1953,7 +2120,7 @@
         par.title = `Modifié par ${x.modifie.par} le ${fmtDate(x.modifie.le)}`;
       }
       const debut = [x.date.toLocaleDateString('fr-FR'), x.categorie, x.libelle, prix.format(x.montant), cellDeductible(x), celluleJustif(x), par];
-      if (x.lien) return [...debut, el('span', 'pastille pastille-attente', x.lien === 'paie' ? 'Auto · paie' : 'Auto · ' + x.lien.toUpperCase())];
+      if (x.lien) return [...debut, el('span', 'pastille pastille-attente', x.lien === 'paie' ? 'Auto · paie' : x.lien === 'neuf' ? 'Auto · vente neuf' : 'Auto · ' + x.lien.toUpperCase())];
       const actions = el('div', 'actions-ligne');
       if (estPatron()) {
         const mod = el('button', 'btn btn-mini btn-ghost', 'Modifier');
@@ -2127,6 +2294,77 @@
     suvs: 'suv', offroad: 'suv', motorcycles: 'moto', cycles: 'moto', vans: 'utilitaire', utility: 'utilitaire',
     commercial: 'utilitaire', industrial: 'utilitaire', service: 'utilitaire', autres: 'autre',
   };
+  const prochaineRef = () => 'cc-' + String(vehicules.reduce((m, v) => Math.max(m, Number((v.id.match(/\d+/) || [0])[0])), 0) + 1).padStart(3, '0');
+  const dateArrivee = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  /* Ajout manuel au stock (direction) : véhicules déjà possédés, sans dépense (ils étaient là avant la compta) */
+  function formulaireStock() {
+    chargerPrixNeufs();
+    const f = el('form', 'panneau form-vente');
+    f.noValidate = true;
+    const tete = el('div', 'panneau-tete');
+    tete.append(el('h2', 'panneau-titre', 'Ajouter un véhicule au stock'));
+    const g = el('div', 'form-grille');
+    const champ = (id, label, input) => { input.id = id; const d = el('div', 'champ'); const l = el('label', null, label); l.htmlFor = id; d.append(l, input); g.append(d); return input; };
+    const modele = champ('st-modele', 'Modèle', el('input'));
+    modele.setAttribute('list', 'st-liste');
+    modele.autocomplete = 'off';
+    const liste = el('datalist');
+    liste.id = 'st-liste';
+    (prixNeufsCache || []).forEach(x => { const o = el('option', null, prix.format(x.p)); o.value = x.n; liste.append(o); });
+    g.append(liste);
+    const type = champ('st-type', 'Type', el('select'));
+    type.innerHTML = '<option value="occasion">Occasion</option><option value="neuf">Neuf</option>';
+    const vente = champ('st-prix', 'Prix de vente ($)', el('input'));
+    const achat = champ('st-achat', "Prix d'achat ($, facultatif)", el('input'));
+    [vente, achat].forEach(i => { i.type = 'number'; i.min = '0'; i.step = '100'; i.inputMode = 'numeric'; });
+    const plaque = champ('st-plaque', 'Plaque (facultatif)', el('input'));
+    plaque.className = 'plaque-input';
+    plaque.maxLength = 8;
+    plaque.addEventListener('input', () => { plaque.value = plaque.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ''); });
+    const pub = el('label', 'case');
+    const coche = el('input');
+    coche.type = 'checkbox';
+    coche.checked = true;
+    pub.append(coche, ' Publier dans le catalogue');
+    g.append(pub);
+    const remplir = () => {
+      const ref = (prixNeufsCache || []).find(x => x.n.toLowerCase() === modele.value.trim().toLowerCase());
+      if (ref && type.value === 'neuf') { if (!vente.value) vente.value = ref.p; if (!achat.value) achat.value = Math.round(ref.p * PART_COUT_CONCESSION / 100); }
+    };
+    modele.addEventListener('change', remplir);
+    type.addEventListener('change', remplir);
+    const msg = el('p', 'form-message');
+    msg.id = 'st-message';
+    msg.setAttribute('role', 'status');
+    const b = el('button', 'btn', 'Ajouter au stock');
+    b.type = 'submit';
+    const pied = el('div', 'form-pied');
+    pied.append(msg, b);
+    f.append(tete, g, el('p', 'calcul-detail panneau-pied', "Pour le stock que le Caracas possède déjà : aucune dépense n'est créée. Les rachats, eux, passent par la page Rachats."), pied);
+    f.addEventListener('submit', ev => {
+      ev.preventDefault();
+      msg.className = 'form-message erreur';
+      if (modele.value.trim().length < 2 || !(Number(vente.value) > 0)) { msg.textContent = 'Indique au moins le modèle et le prix de vente.'; return; }
+      const ref = (prixNeufsCache || []).find(x => x.n.toLowerCase() === modele.value.trim().toLowerCase());
+      const v = {
+        id: prochaineRef(), type: type.value, marque: '', modele: modele.value.trim(),
+        categorie: ref ? CAT_CATALOGUE[ref.c] || 'autre' : 'autre',
+        prix: Math.round(Number(vente.value)), prixAchat: Number(achat.value) > 0 ? Math.round(Number(achat.value)) : undefined,
+        plaque: plaque.value.trim() || undefined, etat: '', image: '',
+        description: type.value === 'neuf' ? 'Véhicule neuf disponible au Caracas.' : "Véhicule d'occasion du Caracas.",
+        statut: 'disponible', en_avant: false, stockInitial: true, publie: coche.checked, arrivee: dateArrivee(new Date()),
+      };
+      vehicules.push(v);
+      journal('Stock', 'Véhicule ajouté manuellement', `${v.id.toUpperCase()} · ${v.modele} · ${TYPE[v.type]} · ${prix.format(v.prix)}`);
+      remplirCategories();
+      rendreAccueil();
+      rendreCatalogue();
+      rendreEspace('espace-stock');
+      const m = $('#st-message');
+      if (m) { m.className = 'form-message succes'; m.textContent = `${v.modele} ajouté au stock (réf. ${v.id.toUpperCase()})${v.publie ? ' et publié au catalogue' : ''}.`; }
+    });
+    return f;
+  }
   function mettreEnStock(r) {
     const max = vehicules.reduce((m, v) => Math.max(m, Number((v.id.match(/\d+/) || [0])[0])), 0);
     const ref = (prixNeufsCache || []).find(x => x.n.toLowerCase() === r.modele.toLowerCase());
@@ -2324,6 +2562,14 @@
     const plaque = f.querySelector('#v-plaque');
     const montant = f.querySelector('#v-prix');
     const msg = f.querySelector('#v-message');
+    const type = f.querySelector('#v-type');
+    const aide = f.querySelector('#v-aide');
+    const majAide = () => {
+      const c = beneficeVente(sel.value, Number(montant.value) || 0, type.value);
+      aide.textContent = type.value === 'neuf'
+        ? (sel.value.trim() ? `Coût d'achat pour le garage : ${prix.format(c.cout)} (${c.source}). Il sera ajouté automatiquement aux dépenses à la validation de la vente.` : 'Neuf : le coût d\'achat (85 % du prix neuf) est ajouté aux dépenses à la validation.')
+        : "Occasion : le prix de rachat est déjà dans les dépenses, aucune dépense n'est ajoutée.";
+    };
     const nomVehicule = nomV;
     const liste = f.querySelector('#v-vehicules-liste');
     vehicules.filter(v => v.statut !== 'vendu').forEach(v => {
@@ -2339,7 +2585,12 @@
         montant.value = v.prix;
         prixAuto = String(v.prix);
       }
+      if (v) type.value = v.type === 'neuf' ? 'neuf' : 'occasion';
+      majAide();
     });
+    type.addEventListener('change', majAide);
+    montant.addEventListener('input', majAide);
+    majAide();
     plaque.addEventListener('input', () => { plaque.value = plaque.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ''); });
     f.addEventListener('submit', e => {
       e.preventDefault();
@@ -2358,8 +2609,8 @@
         f.querySelector('[aria-invalid="true"]').focus();
         return;
       }
-      const cout = beneficeVente(sel.value, Number(montant.value));
-      ventesApercu.unshift({ vendeur: identifiant, poste: posteApercu, date: new Date(), client: client.value.trim(), vehicule: sel.value.trim(), plaque: plaque.value.trim(), prix: Number(montant.value), cout: cout.cout, source: cout.source, benefice: Number(montant.value) - cout.cout, statut: 'attente' });
+      const cout = beneficeVente(sel.value, Number(montant.value), type.value);
+      ventesApercu.unshift({ categorie: type.value, vendeur: identifiant, poste: posteApercu, date: new Date(), client: client.value.trim(), vehicule: sel.value.trim(), plaque: plaque.value.trim(), prix: Number(montant.value), cout: cout.cout, source: cout.source, benefice: Number(montant.value) - cout.cout, statut: 'attente' });
       journal('Ventes', 'Nouvelle vente', `${sel.value.trim()} · ${client.value.trim()} · ${prix.format(Number(montant.value))}`);
       rendreEspace('espace-ventes');
       const m = $('#v-message');
@@ -2389,7 +2640,7 @@
     const l = [
       ...ventesApercu.filter(v => v.statut === 'validee').map(v => ({ date: v.date, libelle: `${v.vehicule}${v.plaque ? ' · ' + v.plaque : ''} · ${v.client}`, categorie: 'Vente véhicule', origine: 'Vente', entree: v.prix, sortie: 0, par: v.vendeur })),
       ...contratsApercu.filter(v => v.statut === 'validee').map(v => ({ date: v.date, libelle: `Contrat ${v.vehicule} · ${v.client}`, categorie: 'Vente de contrat', origine: 'Contrat', entree: v.prix, sortie: 0, par: v.vendeur })),
-      ...depensesApercu.map(x => ({ date: x.date, libelle: x.libelle, categorie: x.categorie, origine: x.lien === 'paie' ? 'Paie' : x.lien ? 'Rachat' : 'Dépense', entree: 0, sortie: x.montant, deductible: x.deductible || 0, par: x.par })),
+      ...depensesApercu.map(x => ({ date: x.date, libelle: x.libelle, categorie: x.categorie, origine: x.lien === 'paie' ? 'Paie' : x.lien === 'neuf' ? 'Achat neuf' : x.lien ? 'Rachat' : 'Dépense', entree: 0, sortie: x.montant, deductible: x.deductible || 0, par: x.par })),
       ...ecrituresApercu.map(x => ({ date: x.date, libelle: x.libelle, categorie: x.categorie, origine: x.lien === 'subvention' ? 'Subvention' : 'Écriture', entree: x.sens === 'entree' ? x.montant : 0, sortie: x.sens === 'sortie' ? x.montant : 0, par: x.par, ecriture: x })),
     ].sort((a, b) => a.date - b.date);
     let solde = 0;
@@ -2773,7 +3024,7 @@
     if (!clotureDe(semPrec.cle) && [...ventesApercu, ...depensesApercu, ...rachatsApercu].some(x => x.date >= semPrec.debut && x.date < semPrec.fin)) {
       aFaire.push([`Semaine précédente (${semPrec.libelle}) pas encore clôturée`, el('span', 'calcul-detail', 'Voir « Clôture de la semaine »')]);
     }
-    equipeApercu.map(etatRH).filter(x => x.alerte).forEach(x => aFaire.push([x.alerte, lienEspace('Ouvrir l’équipe', 'espace-equipe')]));
+    equipeVisible().map(etatRH).filter(x => x.alerte).forEach(x => aFaire.push([x.alerte, lienEspace('Ouvrir l’équipe', 'espace-equipe')]));
     const nResa = reservationsApercu.filter(x => x.statut === 'nouvelle').length;
     if (nResa) aFaire.push([`${nResa} demande(s) de réservation à traiter`, el('span', 'calcul-detail', 'Voir « Demandes de réservation »')]);
     servicesOublies().forEach(x => aFaire.push([`${x.nom} en service depuis ${fmtDuree(new Date() - x.debut)} : badge de fin oublié ?`, boutonArretOubli(x)]));
@@ -2798,7 +3049,7 @@
   const emChamps = { nom: $('#em-nom'), prenom: $('#em-prenom'), tel: $('#em-tel'), poste: $('#em-role'), rib: $('#em-rib') };
   let employeEdite = null;
   let retraitArme = false;
-  POSTES.forEach(p => { const o = el('option', null, p.nom); o.value = p.id; emChamps.poste.append(o); });
+  const remplirRoles = () => emChamps.poste.replaceChildren(...POSTES.filter(p => !p.cache || posteApercu === 'admin').map(p => { const o = el('option', null, p.nom); o.value = p.id; return o; }));
   emChamps.tel.addEventListener('input', () => {
     const c = emChamps.tel.value.replace(/\D/g, '').slice(0, 7);
     emChamps.tel.value = c.length > 3 ? c.slice(0, 3) + '-' + c.slice(3) : c;
@@ -2806,6 +3057,7 @@
   function ouvrirEmploye(e) {
     employeEdite = e || null;
     retraitArme = false;
+    remplirRoles();
     $('#em-titre').textContent = e ? `Modifier ${nomComplet(e)}` : 'Nouvel employé';
     $('#em-valider').textContent = e ? 'Enregistrer' : 'Ajouter';
     const sup = $('#em-supprimer');
@@ -2875,7 +3127,7 @@
   function blocEquipe() {
     const resp = estResponsable();
     const ordre = id => POSTES.findIndex(p => p.id === id);
-    const liste = [...equipeApercu].sort((a, b) => ordre(a.poste) - ordre(b.poste) || a.nom.localeCompare(b.nom, 'fr'));
+    const liste = [...equipeVisible()].sort((a, b) => ordre(a.poste) - ordre(b.poste) || a.nom.localeCompare(b.nom, 'fr'));
     const lignes = liste.map(e => {
       const statut = serviceOuvert(nomComplet(e)) ? el('span', 'pastille pastille-validee', 'En service') : el('span', 'pastille', 'Hors service');
       if (!resp) return [e.nom, e.prenom, nomPoste(e.poste), e.tel, statut];
@@ -2928,7 +3180,8 @@
   const identifiantPropose = e => `${e.prenom}.${e.nom}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9.]+/g, '-');
   const compteDe = e => comptesApercu.find(c => c.employeId === e.id);
   /* La direction gère les comptes des rangs inférieurs ; le patron gère tous les comptes */
-  const peutGerer = e => estResponsable() && (estPatron() || rang(e.poste) > rang(posteApercu));
+  const peutGerer = e => estResponsable() && !(estCache(e) && posteApercu !== 'admin')
+    && (niveau(posteApercu) >= 2 ? niveau(posteApercu) >= niveau(e.poste) : niveau(e.poste) === 1 && rang(e.poste) > rang(posteApercu));
 
   const dlgCompte = $('#dlg-compte');
   const cp = { employe: $('#cp-employe'), id: $('#cp-id'), mdp: $('#cp-mdp'), mdp2: $('#cp-mdp2'), actif: $('#cp-actif') };
@@ -3102,13 +3355,13 @@
   function blocsComptes() {
     const blocs = [panneauMonCompte()];
     if (!estResponsable()) return blocs;
-    if (!equipeApercu.length) {
+    if (!equipeVisible().length) {
       const n = el('p', 'note-reserve', "Aucun employé dans l'Équipe. Les comptes se créent à partir des fiches : ");
       n.append(lienEspace("ajouter des employés dans l'Équipe", 'espace-equipe'), '.');
       blocs.push(n);
       return blocs;
     }
-    const liste = [...equipeApercu].sort((a, b) => rang(a.poste) - rang(b.poste) || a.nom.localeCompare(b.nom, 'fr'));
+    const liste = [...equipeVisible()].sort((a, b) => rang(a.poste) - rang(b.poste) || a.nom.localeCompare(b.nom, 'fr'));
     const lignes = liste.map(e => {
       const c = compteDe(e);
       const gere = peutGerer(e) || (compteConnecte && c && c.id === compteConnecte.id && estPatron());
@@ -3152,7 +3405,7 @@
       extra.type = 'button';
       extra.addEventListener('click', () => ouvrirCompte());
     }
-    const p = panneauAvec(`Comptes des employés · ${comptesApercu.length} / ${equipeApercu.length}`, tableau(['', 'Employé', 'Rôle', 'Identifiant', ...(estPatron() ? ['Mot de passe'] : []), 'Accès', 'Dernière connexion', 'Statut'], lignes, ''), extra);
+    const p = panneauAvec(`Comptes des employés · ${liste.filter(e => compteDe(e)).length} / ${liste.length}`, tableau(['', 'Employé', 'Rôle', 'Identifiant', ...(estPatron() ? ['Mot de passe'] : []), 'Accès', 'Dernière connexion', 'Statut'], lignes, ''), extra);
     p.append(el('p', 'calcul-detail panneau-pied', estPatron() ? 'Le patron gère tous les comptes et voit les mots de passe (visibles par lui seul). Chaque employé doit utiliser un mot de passe propre au Caracas.' : 'Tu gères les comptes des rangs inférieurs au tien. Le rôle se modifie dans la fiche Équipe.'));
     blocs.push(p);
     return blocs;
@@ -3197,6 +3450,20 @@
     $('#rh-liste').replaceChildren(...(rh.sanctions.length ? rh.sanctions.map(s => {
       const d = el('div', 'rh-sanction');
       d.append(el('strong', null, s.type), el('span', null, s.motif), el('span', 'calcul-detail', `Le ${fmtDate(s.date)} par ${s.par}`));
+      if (estResponsable()) {
+        const k = el('button', 'btn btn-mini btn-ghost', 'Retirer la sanction');
+        k.type = 'button';
+        let arme = false;
+        k.addEventListener('click', () => {
+          if (!arme) { arme = true; k.textContent = 'Confirmer le retrait'; k.className = 'btn btn-mini btn-danger'; return; }
+          const l = rhDe(rhEmploye).sanctions;
+          l.splice(l.indexOf(s), 1);
+          journal('Équipe', 'Sanction retirée', `${nomComplet(rhEmploye)} · ${s.type} · ${s.motif}`);
+          listeSanctions();
+          rendreEspace(pageEspace());
+        });
+        d.append(k);
+      }
       return d;
     }) : [el('p', 'calcul-detail', 'Aucune sanction.')]));
     $('#rh-etat').textContent = `État : ${etatRH(rhEmploye).texte} · ${nomPoste(rhEmploye.poste)}`;
@@ -3396,7 +3663,7 @@
   const heuresPayees = (nom, per) => pointagesApercu.filter(x => memeNom(x.nom, nom) && x.debut >= per.debut && x.debut < per.fin).reduce((t, x) => t + msPaye(x), 0);
   const discordPaie = (f, per) => [`**Paie ${f.nom}** · semaine ${per.libelle}`,
     `Heures badgées : ${fmtDuree(f.ms)} (rémunérées : ${fmtDuree(heuresPayees(f.nom, per))} / ${SUBVENTION_HEURES} h)`,
-    `Salaire horaire : ${prix.format(f.salaireHoraire)}`, `Commissions : ${prix.format(f.commission)} (${f.ventes.length} vente(s) validée(s))`,
+    `Salaire horaire : ${prix.format(f.salaireHoraire)}`, `Commissions : ${prix.format(f.commission)} (${f.ventes.length} vente(s) validée(s))`, ...(f.fixe ? [`Salaire fixe : ${prix.format(f.fixe)}`] : []), ...(f.primes ? [`Primes : ${prix.format(f.primes)}`] : []), ...(f.plafonne ? [`Plafonné au salaire max : ${prix.format(f.plafond)}`] : []),
     `**Total : ${prix.format(f.total)}** · ${f.paye ? `payé le ${fmtDate(f.paye.le)}` : 'à payer'}`].join('\n');
   const discordBilan = (b, c) => [`**Bilan de la semaine ${b.libelle}**${c ? ' · clôturée' : ''} · Le Caracas`,
     ...b.tuiles.map(([l, v, n]) => `${l} : **${v}** (${n})`),
@@ -3410,8 +3677,10 @@
       ['Heures badgées', fmtDuree(f.ms)],
       [`Heures rémunérées (${SUBVENTION_HEURES} h max par semaine)`, fmtDuree(paye)],
       ['Taux horaire du grade', `${prix.format(tauxDe(f.poste))} / h`],
-      ['Salaire horaire', prix.format(f.salaireHoraire)],
+      [f.fixe ? 'Salaire fixe (comptable)' : 'Salaire horaire', prix.format(f.fixe || f.salaireHoraire)],
       [`Commissions (${commissionDe(f.poste)} % du bénéfice des ventes validées)`, prix.format(f.commission)],
+      ...(f.primes ? [['Primes', prix.format(f.primes)]] : []),
+      ...(f.plafonne ? [[`Plafonné au salaire max du rôle`, prix.format(f.plafond)]] : []),
       ['Total de la semaine', prix.format(f.total)],
     ];
     const etat = f.paye ? `Payé le ${fmtDate(f.paye.le)} par ${f.paye.par}` : 'À payer';
@@ -3449,7 +3718,7 @@ ${f.ventes.length ? `<table><thead><tr><th>Date</th><th>Type</th><th>Vente</th><
 
   /* ---------- Équipe : RIB à copier (direction) ---------- */
   function panneauRIB() {
-    const liste = [...equipeApercu].sort((a, b) => rang(a.poste) - rang(b.poste) || a.nom.localeCompare(b.nom, 'fr'));
+    const liste = [...equipeVisible()].sort((a, b) => rang(a.poste) - rang(b.poste) || a.nom.localeCompare(b.nom, 'fr'));
     const lignes = liste.map(e => {
       const b = el('button', 'btn btn-mini', 'Copier');
       b.type = 'button';
@@ -3527,8 +3796,8 @@ ${f.ventes.length ? `<table><thead><tr><th>Date</th><th>Type</th><th>Vente</th><
       ],
       resume: donneesResume(per).map(x => ({ ...x, lignes: x.lignes.filter(l => l[0] !== 'En service maintenant') })),
       tables: [
-        { titre: 'Paie par employé', colonnes: ['Employé', 'Grade', 'Heures', 'Salaire horaire', 'Commission', 'Total', 'Statut'], vide: 'Aucune paie sur la semaine.',
-          lignes: fiches.map(f => [f.nom, nomPoste(f.poste), fmtDuree(f.ms), prix.format(f.salaireHoraire), prix.format(f.commission), prix.format(f.total), f.paye ? 'Payé' : f.total > 0 ? 'À payer' : '—']) },
+        { titre: 'Paie par employé', colonnes: ['Employé', 'Grade', 'Heures', 'Salaire', 'Commission', 'Primes', 'Total', 'Statut'], vide: 'Aucune paie sur la semaine.',
+          lignes: fiches.map(f => [f.nom, nomPoste(f.poste), fmtDuree(f.ms), prix.format(f.salaireHoraire + (f.fixe || 0)), prix.format(f.commission), prix.format(f.primes || 0), prix.format(f.total) + (f.plafonne ? ' (plafond)' : ''), f.paye ? 'Payé' : f.total > 0 ? 'À payer' : '—']) },
         { titre: 'Ventes et contrats', colonnes: ['Date', 'Type', 'Client', 'Véhicule', 'Vendeur', 'Prix', 'Statut'], vide: 'Aucune vente.',
           lignes: ventes.map(v => [jour(v.date), v.genre, v.client, v.vehicule, v.vendeur || '—', prix.format(v.prix), STAT[v.statut] || v.statut]) },
         { titre: 'Rachats', colonnes: ['Date', 'Client', 'Modèle', 'Plaque', 'Prix de rachat', 'Revente prévue', 'Par'], vide: 'Aucun rachat.',
@@ -3657,8 +3926,8 @@ ${ordre.map(n => b.tables.find(x => x.titre === n)).filter(Boolean).map(table).j
   function etatDonnees() {
     return structuredClone({
       pointages: pointagesApercu, ventes: ventesApercu, contrats: contratsApercu, rachats: rachatsApercu, depenses: depensesApercu,
-      paies: paiesApercu, ecritures: ecrituresApercu, vehicules, clotures: cloturesApercu, prixNeufs: prixNeufsCache, equipe: equipeApercu, comptes: comptesApercu, reservations: reservationsApercu,
-      reglages: { marge: MARGE_REVENTE, taux: POSTES.map(p => [p.id, p.taux]) },
+      paies: paiesApercu, ecritures: ecrituresApercu, vehicules, clotures: cloturesApercu, prixNeufs: prixNeufsCache, equipe: equipeApercu, comptes: comptesApercu, reservations: reservationsApercu, primes: primesApercu,
+      reglages: { marge: MARGE_REVENTE, taux: POSTES.map(p => [p.id, p.taux]), postes: etatPostes() },
     });
   }
   const resumeDonnees = d => `${(d.equipe || []).length} employé(s), ${(d.comptes || []).length} compte(s), ${d.ventes.length} vente(s), ${d.contrats.length} contrat(s), ${d.rachats.length} rachat(s), ${d.depenses.length} dépense(s), ${d.pointages.length} pointage(s), ${d.clotures.length} semaine(s) clôturée(s)`;
@@ -3682,11 +3951,13 @@ ${ordre.map(n => b.tables.find(x => x.titre === n)).filter(Boolean).map(table).j
       });
     } else remplacer(comptesApercu, d.comptes);
     remplacer(reservationsApercu, d.reservations);
+    remplacer(primesApercu, d.primes);
     vehicules = structuredClone(d.vehicules || []);
     if (d.prixNeufs) prixNeufsCache = structuredClone(d.prixNeufs);
     if (d.reglages) {
       if (d.reglages.marge >= 0) MARGE_REVENTE = d.reglages.marge;
       (d.reglages.taux || []).forEach(([id, taux]) => { const p = POSTES.find(x => x.id === id); if (p && taux >= 0) p.taux = taux; });
+      appliquerPostes(d.reglages.postes);
     }
     demoChargee = [pointagesApercu, ventesApercu, depensesApercu, vehicules].some(t => t.some(x => x.demo));
     majBoutonsDemo();
@@ -3916,6 +4187,7 @@ ${ordre.map(n => b.tables.find(x => x.titre === n)).filter(Boolean).map(table).j
     });
     if (c.reglages) blocs.push(bouton('Enregistrer les paramètres'));
     if (c.marge && estResponsable()) blocs.push(panneauMarge());
+    if (c.remuneration && estPatron()) blocs.push(panneauRemuneration());
     if (c.prixVehicules) blocs.push(estResponsable() ? panneauPrix() : el('p', 'note-reserve', 'La modification des prix des véhicules est réservée aux managers et à la direction.'));
     if (c.calculateur) blocs.push(calculateurRachat());
     if (c.onglets) {
@@ -3940,6 +4212,7 @@ ${ordre.map(n => b.tables.find(x => x.titre === n)).filter(Boolean).map(table).j
     if (c.comptes) blocs.push(...blocsComptes());
     if (c.historique && !masque) blocs.push(...blocsHistorique());
     if (c.formulaire === 'depense' && !masque) blocs.push(formulaireDepense());
+    if (c.stockManuel && estResponsable()) blocs.push(formulaireStock());
     if (c.plafonds && !masque) blocs.push(panneauPlafonds());
     if (masque) blocs.push(el('p', 'note-reserve', c.messageReserve || 'Le registre des rachats est réservé aux managers et à la direction. Envoie ton devis sur Discord pour validation.'));
 
@@ -4049,7 +4322,7 @@ ${ordre.map(n => b.tables.find(x => x.titre === n)).filter(Boolean).map(table).j
     equipe: () => equipeApercu, comptes: () => comptesApercu, ventes: () => ventesApercu, contrats: () => contratsApercu,
     rachats: () => rachatsApercu, pointages: () => pointagesApercu, depenses: () => depensesApercu, paies: () => paiesApercu,
     ecritures: () => ecrituresApercu, clotures: () => cloturesApercu, reservations: () => reservationsApercu,
-    journal: () => journalApercu, sauvegardes: () => sauvegardesApercu, vehicules: () => vehicules,
+    journal: () => journalApercu, sauvegardes: () => sauvegardesApercu, vehicules: () => vehicules, primes: () => primesApercu,
   };
   const SECRETS = new Set(['mdp', 'hash', 'sel', '_id']);
   const idDe = x => String(x.id || x._id || (x._id = crypto.randomUUID()));
@@ -4071,10 +4344,11 @@ ${ordre.map(n => b.tables.find(x => x.titre === n)).filter(Boolean).map(table).j
     if (v && typeof v === 'object') { Object.keys(v).forEach(k => { v[k] = raviver(v[k]); }); return v; }
     return v;
   };
-  const reglagesEtat = () => ({ marge: MARGE_REVENTE, taux: POSTES.map(p => [p.id, p.taux]) });
+  const reglagesEtat = () => ({ marge: MARGE_REVENTE, taux: POSTES.map(p => [p.id, p.taux]), postes: etatPostes() });
   const appliquerReglages = d => {
     if (d.marge >= 0) MARGE_REVENTE = d.marge;
     (d.taux || []).forEach(([id, t]) => { const p = POSTES.find(x => x.id === id); if (p && t >= 0) p.taux = t; });
+    appliquerPostes(d.postes);
   };
   const versionServeur = {};
   let syncMinuteur = null;
