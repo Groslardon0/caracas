@@ -607,6 +607,20 @@
       depensesApercu.unshift({ n: depensesApercu.length, date: new Date(), categorie: CAT_ACHAT_NEUF, libelle: `${v.vehicule} · ${v.plaque} · ${v.client}`, montant: v.cout, par: identifiant, lien: 'neuf' });
       v.depenseAuto = true;
     }
+    if (statut === 'validee' && v.categorie === 'occasion' && !v.vehiculeRetire) {
+      const pl = (v.plaque || '').replace(/\s/g, '').toUpperCase();
+      const st = vehicules.find(x => x.id === v.vehiculeId)
+        || (pl && vehicules.find(x => x.type === 'occasion' && (plaqueDe(x) || '').replace(/\s/g, '').toUpperCase() === pl))
+        || vehicules.find(x => x.type === 'occasion' && x.statut !== 'vendu' && nomV(x).toLowerCase() === (v.vehicule || '').trim().toLowerCase());
+      if (st) {
+        vehicules.splice(vehicules.indexOf(st), 1);
+        v.vehiculeRetire = { id: st.id, modele: nomV(st) };
+        journal('Stock', 'Véhicule vendu retiré du stock et du catalogue', `${st.id.toUpperCase()} · ${nomV(st)} · ${v.client}`);
+        remplirCategories();
+        rendreAccueil();
+        rendreCatalogue();
+      }
+    }
     journal('Ventes', statut === 'validee' ? 'Validation' : 'Refus', `${'plaque' in v ? 'Vente' : 'Contrat'} ${v.vehicule} · ${v.client} · ${prix.format(v.prix)}`);
     rendreEspace('espace-ventes');
   }
@@ -2366,6 +2380,9 @@
     suvs: 'suv', offroad: 'suv', motorcycles: 'moto', cycles: 'moto', vans: 'utilitaire', utility: 'utilitaire',
     commercial: 'utilitaire', industrial: 'utilitaire', service: 'utilitaire', autres: 'autre',
   };
+  function plaqueDe(v) {
+    return v.plaque || (rachatsApercu.find(r => r.ref === v.id) || {}).plaque || '';
+  }
   const prochaineRef = () => 'cc-' + String(vehicules.reduce((m, v) => Math.max(m, Number((v.id.match(/\d+/) || [0])[0])), 0) + 1).padStart(3, '0');
   const dateArrivee = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   /* Ajout manuel au stock (direction) : véhicules déjà possédés, sans dépense (ils étaient là avant la compta) */
@@ -2445,7 +2462,7 @@
       id: 'cc-' + String(max + 1).padStart(3, '0'),
       type: 'occasion', marque: '', modele: r.modele,
       categorie: ref ? CAT_CATALOGUE[ref.c] || 'autre' : 'autre',
-      prix: r.prix, prixAchat: r.prixAchat, etat: '', image: r.photo || '',
+      prix: r.prix, prixAchat: r.prixAchat, plaque: r.plaque || undefined, etat: '', image: r.photo || '',
       description: r.options && r.options.length ? 'Véhicule repris par le Caracas. Customisation : ' + r.options.join(', ') + '.' : 'Véhicule repris par le Caracas.',
       statut: 'disponible', en_avant: false, rachat: true, publie: false,
       arrivee: `${aujourdhui.getFullYear()}-${String(aujourdhui.getMonth() + 1).padStart(2, '0')}-${String(aujourdhui.getDate()).padStart(2, '0')}`,
@@ -2636,6 +2653,7 @@
     const msg = f.querySelector('#v-message');
     const type = f.querySelector('#v-type');
     const aide = f.querySelector('#v-aide');
+    let prixAuto = '';
     const majAide = () => {
       const c = beneficeVente(sel.value, Number(montant.value) || 0, type.value);
       aide.textContent = type.value === 'neuf'
@@ -2643,13 +2661,41 @@
         : "Occasion : le prix de rachat est déjà dans les dépenses, aucune dépense n'est ajoutée.";
     };
     const nomVehicule = nomV;
+    /* Occasion : choix d'un véhicule du stock, qui remplit modèle, plaque et prix */
+    const zone = el('div', 'champ');
+    const labStock = el('label', null, "Véhicule d'occasion du stock");
+    labStock.htmlFor = 'v-stock';
+    const stock = el('select');
+    stock.id = 'v-stock';
+    const occasions = vehicules.filter(v => v.type === 'occasion' && v.statut !== 'vendu')
+      .sort((a, b) => nomVehicule(a).localeCompare(nomVehicule(b), 'fr'));
+    stock.append(el('option', null, occasions.length ? '— Choisir dans le stock —' : 'Aucune occasion en stock'));
+    stock.options[0].value = '';
+    occasions.forEach(v => {
+      const pl = plaqueDe(v);
+      const o = el('option', null, `${v.id.toUpperCase()} · ${nomVehicule(v)}${pl ? ' · ' + pl : ''} · ${prix.format(v.prix)}`);
+      o.value = v.id;
+      stock.append(o);
+    });
+    zone.append(labStock, stock);
+    type.closest('.champ').after(zone);
+    const majZone = () => { zone.hidden = type.value !== 'occasion'; if (zone.hidden) stock.value = ''; };
+    stock.addEventListener('change', () => {
+      const v = vehicules.find(x => x.id === stock.value);
+      if (!v) return;
+      sel.value = nomVehicule(v);
+      plaque.value = plaqueDe(v) || plaque.value;
+      montant.value = v.prix;
+      prixAuto = String(v.prix);
+      majAide();
+    });
+    type.addEventListener('change', majZone);
     const liste = f.querySelector('#v-vehicules-liste');
     vehicules.filter(v => v.statut !== 'vendu').forEach(v => {
       const o = el('option', null, `${TYPE[v.type]} · ${prix.format(v.prix)}`);
       o.value = nomVehicule(v);
       liste.append(o);
     });
-    let prixAuto = '';
     sel.addEventListener('input', () => {
       const saisie = sel.value.trim().toLowerCase();
       const v = vehicules.find(x => x.statut !== 'vendu' && nomVehicule(x).toLowerCase() === saisie);
@@ -2658,8 +2704,10 @@
         prixAuto = String(v.prix);
       }
       if (v) type.value = v.type === 'neuf' ? 'neuf' : 'occasion';
+      if (v && v.type === 'occasion') { majZone(); stock.value = v.id; if (!plaque.value) plaque.value = plaqueDe(v) || ''; }
       majAide();
     });
+    majZone();
     type.addEventListener('change', majAide);
     montant.addEventListener('input', majAide);
     majAide();
@@ -2681,8 +2729,9 @@
         f.querySelector('[aria-invalid="true"]').focus();
         return;
       }
-      const cout = beneficeVente(sel.value, Number(montant.value), type.value);
-      ventesApercu.unshift({ categorie: type.value, vendeur: identifiant, poste: posteApercu, date: new Date(), client: client.value.trim(), vehicule: sel.value.trim(), plaque: plaque.value.trim(), prix: Number(montant.value), cout: cout.cout, source: cout.source, benefice: Number(montant.value) - cout.cout, statut: 'attente' });
+      const duStock = type.value === 'occasion' && vehicules.find(x => x.id === stock.value);
+      const cout = duStock && duStock.prixAchat ? { cout: duStock.prixAchat, source: `prix d'achat (${duStock.id.toUpperCase()})` } : beneficeVente(sel.value, Number(montant.value), type.value);
+      ventesApercu.unshift({ categorie: type.value, ...(duStock ? { vehiculeId: duStock.id } : {}), vendeur: identifiant, poste: posteApercu, date: new Date(), client: client.value.trim(), vehicule: sel.value.trim(), plaque: plaque.value.trim(), prix: Number(montant.value), cout: cout.cout, source: cout.source, benefice: Number(montant.value) - cout.cout, statut: 'attente' });
       journal('Ventes', 'Nouvelle vente', `${sel.value.trim()} · ${client.value.trim()} · ${prix.format(Number(montant.value))}`);
       rendreEspace('espace-ventes');
       const m = $('#v-message');
