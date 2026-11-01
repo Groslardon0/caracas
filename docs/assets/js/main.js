@@ -343,13 +343,13 @@
       titre: 'Stock', intro: 'Les véhicules du parc. Ceux marqués « en vente » apparaîtront dans le catalogue public.',
       tuiles: ['Véhicules en stock', 'Valeur du stock', 'Réservés'],
       registres: [{
-        titre: 'Parc', colonnes: () => ['Réf.', 'Véhicule', 'Type', 'Origine', ...(estResponsable() ? ["Prix d'achat"] : []), 'Prix de vente', ...(estResponsable() ? ['Marge'] : []), 'Statut', 'Arrivée', 'Catalogue', ...(estResponsable() ? ['Supprimer'] : [])], vide: 'Aucun véhicule en stock pour le moment.',
+        titre: 'Parc', colonnes: () => ['Réf.', 'Véhicule', 'Type', 'Origine', ...(estResponsable() ? ["Prix d'achat"] : []), 'Prix de vente', ...(estResponsable() ? ['Marge'] : []), 'Statut', 'Arrivée', 'Catalogue', ...(estResponsable() ? ['Annonce', 'Supprimer'] : [])], vide: 'Aucun véhicule en stock pour le moment.',
         lignes: () => [...vehicules].sort((a, b) => (b.arrivee || '').localeCompare(a.arrivee || '')).map(v => [
           v.id.toUpperCase(), nomV(v), TYPE[v.type], v.rachat ? 'Rachat' : v.stockInitial ? 'Ajout manuel' : 'Concession',
           ...(estResponsable() ? [v.prixAchat ? prix.format(v.prixAchat) : '—'] : []), prix.format(v.prix), ...(estResponsable() ? [v.prixAchat ? texteMarge(v.prix, v.prixAchat) : '—'] : []), STATUT[v.statut] || v.statut,
           v.arrivee ? new Date(v.arrivee + 'T12:00').toLocaleDateString('fr-FR') : '—',
           publication(v, 'espace-stock'),
-          ...(estResponsable() ? [boutonSuppression(v)] : []),
+          ...(estResponsable() ? [boutonModifier(v), boutonSuppression(v)] : []),
         ]),
       }],
     },
@@ -2087,7 +2087,7 @@
         : c ? (c.total ? 'Déductible en totalité, sans plafond.' : c.plafond ? `Déductible jusqu'à ${prix.format(c.plafond)} par semaine${c.maxVehicules ? ' (1 véhicule maximum)' : ''}.` : `Déductibilité selon les ${c.regle}.`)
           : 'Catégorie libre : dépense enregistrée comme non déductible.';
     });
-    f.addEventListener('submit', e => {
+    f.addEventListener('submit', async e => {
       e.preventDefault();
       const manque = [];
       const verifier = (champ, ok, nom) => {
@@ -2104,10 +2104,20 @@
         f.querySelector('[aria-invalid="true"]').focus();
         return;
       }
+      let justifUrl = justif.url();
+      if (justif.fichier()) {
+        msg.className = 'form-message';
+        msg.textContent = 'Envoi du justificatif…';
+        try { justifUrl = await envoyerPhoto(justif.fichier(), 'justificatifs'); } catch (err) {
+          msg.className = 'form-message erreur';
+          msg.textContent = "Le justificatif n'a pas pu être envoyé (" + err.message + ').';
+          return;
+        }
+      }
       const c = catDepense(cat.value);
       depensesApercu.unshift({
         n: depensesApercu.length, date: new Date(date.value + 'T12:00'), categorie: c ? c.nom : cat.value.trim(),
-        libelle: libelle.value.trim(), montant: Math.round(Number(montant.value)), par: identifiant, justif: justif.url(),
+        libelle: libelle.value.trim(), montant: Math.round(Number(montant.value)), par: identifiant, justif: justifUrl,
       });
       journal('Dépenses', 'Ajout', `${libelle.value.trim()} · ${prix.format(Math.round(Number(montant.value)))}`);
       rendreEspace('espace-depenses');
@@ -2254,7 +2264,7 @@
       apercu.src = url;
       zone.hidden = false;
     });
-    return { url: () => url };
+    return { url: () => url, fichier: () => (url ? input.files[0] : null) };
   }
 
   /* Photos (rachats, justificatifs) : vignette dans les registres, grand format dans une fenêtre */
@@ -2380,6 +2390,118 @@
     suvs: 'suv', offroad: 'suv', motorcycles: 'moto', cycles: 'moto', vans: 'utilitaire', utility: 'utilitaire',
     commercial: 'utilitaire', industrial: 'utilitaire', service: 'utilitaire', autres: 'autre',
   };
+  /* ---------- Photos en ligne (Supabase Storage, dossier public « photos ») ; aperçu : adresse locale ---------- */
+  async function compresserImage(fichier) {
+    const img = await createImageBitmap(fichier);
+    const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.width * k);
+    c.height = Math.round(img.height * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return new Promise((ok, ko) => c.toBlob(b => (b ? ok(b) : ko(new Error('image illisible'))), 'image/jpeg', 0.82));
+  }
+  async function envoyerPhoto(fichier, dossier) {
+    if (!(EN_LIGNE && sb && compteConnecte)) return URL.createObjectURL(fichier);
+    const blob = await compresserImage(fichier);
+    const chemin = `${dossier}/${new Date().toISOString().slice(0, 10)}-${crypto.randomUUID()}.jpg`;
+    const { error } = await sb.storage.from('photos').upload(chemin, blob, { contentType: 'image/jpeg', upsert: false });
+    if (error) throw new Error(error.message);
+    return sb.storage.from('photos').getPublicUrl(chemin).data.publicUrl;
+  }
+
+  /* ---------- Modifier une annonce (direction) : texte, prix, état, statut, mise en avant, photo ---------- */
+  let dlgAnnonce = null;
+  function boutonModifier(v) {
+    const b = el('button', 'btn btn-mini btn-ghost', 'Modifier');
+    b.type = 'button';
+    b.setAttribute('aria-label', `Modifier l'annonce ${v.id.toUpperCase()} · ${nomV(v)}`);
+    b.addEventListener('click', () => ouvrirAnnonce(v));
+    return b;
+  }
+  function ouvrirAnnonce(v) {
+    if (!dlgAnnonce) {
+      dlgAnnonce = el('dialog', 'dlg dlg-devis dlg-rh');
+      dlgAnnonce.setAttribute('aria-labelledby', 'an-titre');
+      document.body.append(dlgAnnonce);
+    }
+    const opts = (o, val) => Object.entries(o).map(([k, t]) => `<option value="${k}"${k === val ? ' selected' : ''}>${t}</option>`).join('');
+    dlgAnnonce.innerHTML = `<form class="dlg-corps" novalidate>
+      <div><p class="eyebrow">Annonce · réf. ${v.id.toUpperCase()}</p><h2 class="dlg-titre" id="an-titre"></h2></div>
+      <div class="em-grille">
+        <div class="champ"><label for="an-marque">Marque</label><input id="an-marque" autocomplete="off"></div>
+        <div class="champ"><label for="an-modele">Modèle</label><input id="an-modele" autocomplete="off"></div>
+        <div class="champ"><label for="an-type">Type</label><select id="an-type">${opts(TYPE, v.type)}</select></div>
+        <div class="champ"><label for="an-cat">Catégorie</label><select id="an-cat">${opts(CAT, v.categorie)}</select></div>
+        <div class="champ"><label for="an-prix">Prix de vente ($)</label><input id="an-prix" type="number" min="0" step="100" inputmode="numeric"></div>
+        <div class="champ"><label for="an-statut">Statut</label><select id="an-statut">${opts(STATUT, v.statut)}</select></div>
+        <div class="champ"><label for="an-annee">Année</label><input id="an-annee" type="number" min="1900" max="2100" inputmode="numeric"></div>
+        <div class="champ"><label for="an-km">Kilométrage</label><input id="an-km" type="number" min="0" step="100" inputmode="numeric"></div>
+        <div class="champ"><label for="an-etat">État</label><select id="an-etat"><option value="">—</option>${opts(ETAT, v.etat)}</select></div>
+        <div class="champ"><label for="an-places">Places</label><input id="an-places" type="number" min="1" max="20" inputmode="numeric"></div>
+        <div class="champ"><label for="an-plaque">Plaque</label><input id="an-plaque" class="plaque-input" maxlength="8" autocomplete="off"></div>
+        <label class="case" for="an-avant"><input id="an-avant" type="checkbox"> Mise en avant (carrousel de l'accueil)</label>
+        <div class="champ em-large"><label for="an-desc">Description</label><textarea id="an-desc" rows="3"></textarea></div>
+        <div class="champ champ-photo em-large"><label for="an-photo">Photo (remplace l'actuelle)</label><input id="an-photo" type="file" accept="image/*">
+          <div class="photo-zone" id="an-zone"><img class="photo-apercu" id="an-apercu" alt="Photo de l'annonce"><button class="btn btn-ghost btn-sm" type="button" id="an-retirer">Retirer la photo</button></div></div>
+      </div>
+      <p class="form-message" id="an-message" role="status"></p>
+      <div class="devis-actions"><button class="btn btn-ghost" type="button" id="an-annuler">Annuler</button><button class="btn" type="submit">Enregistrer l'annonce</button></div>
+    </form>`;
+    const q = s2 => dlgAnnonce.querySelector(s2);
+    q('#an-titre').textContent = nomV(v);
+    q('#an-marque').value = v.marque || '';
+    q('#an-modele').value = v.modele || '';
+    q('#an-prix').value = v.prix || '';
+    q('#an-annee').value = v.annee || '';
+    q('#an-km').value = v.kilometrage != null ? v.kilometrage : '';
+    q('#an-places').value = v.places || '';
+    q('#an-plaque').value = plaqueDe(v);
+    q('#an-avant').checked = !!v.en_avant;
+    q('#an-desc').value = v.description || '';
+    q('#an-plaque').addEventListener('input', () => { q('#an-plaque').value = q('#an-plaque').value.toUpperCase().replace(/[^A-Z0-9 ]/g, ''); });
+    let image = v.image || '';
+    let fichier = null;
+    const majPhoto = src => { q('#an-zone').hidden = !src; if (src) q('#an-apercu').src = src; };
+    majPhoto(image);
+    q('#an-retirer').addEventListener('click', () => { image = ''; fichier = null; q('#an-photo').value = ''; majPhoto(''); });
+    q('#an-photo').addEventListener('change', () => {
+      const fic = q('#an-photo').files[0];
+      if (!fic) return;
+      if (!fic.type.startsWith('image/') || fic.size > 10 * 1024 * 1024) { q('#an-message').className = 'form-message erreur'; q('#an-message').textContent = 'La photo doit être une image de 10 Mo maximum.'; q('#an-photo').value = ''; return; }
+      fichier = fic;
+      majPhoto(URL.createObjectURL(fic));
+    });
+    q('#an-annuler').addEventListener('click', () => dlgAnnonce.close());
+    q('form').addEventListener('submit', async ev => {
+      ev.preventDefault();
+      const m = q('#an-message');
+      const prixV = Math.round(Number(q('#an-prix').value));
+      if (q('#an-modele').value.trim().length < 2 || !(prixV > 0)) { m.className = 'form-message erreur'; m.textContent = 'Indique au moins le modèle et un prix de vente.'; return; }
+      if (fichier) {
+        m.className = 'form-message';
+        m.textContent = 'Envoi de la photo…';
+        try { image = await envoyerPhoto(fichier, 'annonces'); } catch (err) { m.className = 'form-message erreur'; m.textContent = "La photo n'a pas pu être envoyée (" + err.message + ').'; return; }
+      }
+      const num = id => (q(id).value === '' ? undefined : Number(q(id).value));
+      const avant = `${nomV(v)} · ${prix.format(v.prix)} · ${STATUT[v.statut] || v.statut}`;
+      Object.assign(v, {
+        marque: q('#an-marque').value.trim(), modele: q('#an-modele').value.trim(), type: q('#an-type').value, categorie: q('#an-cat').value,
+        prix: prixV, statut: q('#an-statut').value, annee: num('#an-annee'), kilometrage: num('#an-km'), etat: q('#an-etat').value,
+        places: num('#an-places'), plaque: q('#an-plaque').value.trim() || undefined, en_avant: q('#an-avant').checked,
+        description: q('#an-desc').value.trim(), image,
+      });
+      const r = rachatsApercu.find(x => x.ref === v.id);
+      if (r) { r.revente = v.prix; if (fichier || !image) r.photo = image || null; }
+      journal('Stock', 'Annonce modifiée', `${v.id.toUpperCase()} · ${avant} → ${nomV(v)} · ${prix.format(v.prix)} · ${STATUT[v.statut] || v.statut}${fichier ? ' · nouvelle photo' : ''}`);
+      dlgAnnonce.close();
+      remplirCategories();
+      rendreAccueil();
+      rendreCatalogue();
+      rendreEspace(pageEspace());
+    });
+    dlgAnnonce.showModal();
+  }
+
   function plaqueDe(v) {
     return v.plaque || (rachatsApercu.find(r => r.ref === v.id) || {}).plaque || '';
   }
@@ -2516,7 +2638,9 @@
     const apercu = f.querySelector('#ra-apercu');
     const zone = f.querySelector('#ra-zone');
     let photoUrl = null;
+    let fichierPhoto = null;
     f.querySelector('#ra-retirer').addEventListener('click', () => {
+      fichierPhoto = null;
       if (photoUrl) URL.revokeObjectURL(photoUrl);
       photoUrl = null;
       photo.value = '';
@@ -2538,6 +2662,7 @@
         return;
       }
       msg.textContent = '';
+      fichierPhoto = fichier;
       photoUrl = URL.createObjectURL(fichier);
       apercu.src = photoUrl;
       zone.hidden = false;
@@ -2546,7 +2671,7 @@
       f.querySelector('#ra-liste').replaceChildren(...d.map(x => { const o = el('option'); o.value = x.n; return o; }));
     });
     plaque.addEventListener('input', () => { plaque.value = plaque.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ''); });
-    f.addEventListener('submit', e => {
+    f.addEventListener('submit', async e => {
       e.preventDefault();
       const manque = [];
       const verifier = (champ, ok, nom) => {
@@ -2563,6 +2688,15 @@
         msg.textContent = 'À compléter : ' + manque.join(', ') + '.';
         f.querySelector('[aria-invalid="true"]').focus();
         return;
+      }
+      if (fichierPhoto) {
+        msg.className = 'form-message';
+        msg.textContent = 'Envoi de la photo…';
+        try { photoUrl = await envoyerPhoto(fichierPhoto, 'rachats'); } catch (err) {
+          msg.className = 'form-message erreur';
+          msg.textContent = "La photo n'a pas pu être envoyée (" + err.message + '). Réessaie, ou retire la photo pour enregistrer sans.';
+          return;
+        }
       }
       const nomModele = modele.value.trim();
       const v = mettreEnStock({ modele: nomModele, prixAchat: Number(montant.value), prix: Number(revente.value), plaque: plaque.value.trim(), photo: photoUrl, options: optionsCalc });
