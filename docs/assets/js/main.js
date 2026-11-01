@@ -395,6 +395,7 @@
       ],
       marge: true,
       remuneration: true,
+      fiscal: true,
       prixVehicules: true,
     },
     'espace-badgeuse': {
@@ -1756,6 +1757,138 @@
     const m = vente - achat;
     return `${prix.format(m)} (${achat ? Math.round(m / achat * 1000) / 10 : 0} %)`.replace('.', ',');
   };
+  /* ---------- Impôts (CTC chapitre VI) ----------
+     Art. 60 : CA = recettes ; D = dépenses déductibles ; B = CA − D.  Art. 62 : charges déductibles (plafonds, salaires, matières premières).
+     Art. 63-1 : IS hebdomadaire par tranches de bénéfice.  Art. 64-2 : 20 % sur les dividendes.
+     Art. 65-1 : déclaration et paiement au plus tard le mardi 23 h 59 suivant la semaine ; majoration 20/30/40/50 % par tranche de 24 h de retard. */
+  const FISCAL = { bareme: 'tranche', matieres: true };
+  const BAREME_IS = [[5000, 1], [10000, 4], [20000, 9], [30000, 13], [50000, 18], [80000, 25], [100000, 35], [200000, 40], [500000, 45], [Infinity, 50]];
+  const TAUX_DIVIDENDES = 20;
+  const RECETTES_HORS_CA = ['Solde de départ', 'Apport'];
+  const CAT_IMPOT = 'Impôts (IRS)';
+  function calculIS(b) {
+    if (b <= 0) return { montant: 0, taux: 0 };
+    if (FISCAL.bareme === 'paliers') {
+      let bas = 0;
+      let m = 0;
+      for (const [haut, t] of BAREME_IS) {
+        m += Math.max(0, Math.min(b, haut) - bas) * t / 100;
+        if (b <= haut) break;
+        bas = haut;
+      }
+      return { montant: Math.round(m), taux: Math.round(m / b * 1000) / 10 };
+    }
+    const [, t] = BAREME_IS.find(([h]) => b <= h);
+    return { montant: Math.round(b * t / 100), taux: t };
+  }
+  const echeanceImpot = per => new Date(per.fin.getTime() + 2 * JOUR_MS - 60000);
+  function majorationRetard(per, date) {
+    const h = (date - echeanceImpot(per)) / 3600000;
+    if (h <= 0) return 0;
+    return h <= 24 ? 20 : h <= 48 ? 30 : h <= 72 ? 40 : 50;
+  }
+  /* Semaines réglées hors du site (avant son utilisation) : marqueur sans dépense */
+  const impotsReglesApercu = [];
+  const versementImpot = per => depensesApercu.find(x => x.lien === 'impot' && x.cle === per.cle)
+    || (r => r && { date: r.le, montant: r.montant, par: r.par, horsSite: true })(impotsReglesApercu.find(x => x.cle === per.cle));
+  function impotSemaine(per) {
+    calculerDeductible();
+    const dans = d => d >= per.debut && d < per.fin;
+    const ventes = caPeriode(per);
+    const autres = ecrituresApercu.filter(x => x.sens === 'entree' && dans(x.date) && !RECETTES_HORS_CA.includes(x.categorie)).reduce((t, x) => t + x.montant, 0);
+    const ca = ventes + autres;
+    const deductible = depensesApercu.filter(x => dans(x.date) && x.lien !== 'impot').reduce((t, x) => t + (x.deductible || 0), 0);
+    const benefice = ca - deductible;
+    const is = calculIS(benefice);
+    const dividendes = ecrituresApercu.filter(x => x.sens === 'sortie' && x.categorie === 'Dividendes' && dans(x.date)).reduce((t, x) => t + x.montant, 0);
+    const id = Math.round(dividendes * TAUX_DIVIDENDES / 100);
+    const paiement = versementImpot(per);
+    const maintenant = new Date();
+    const majo = maintenant < per.fin || (paiement && paiement.horsSite) ? 0 : majorationRetard(per, paiement ? paiement.date : maintenant);
+    const du = is.montant + id;
+    return { per, ventes, autres, ca, deductible, benefice, is, dividendes, id, du, majo, total: Math.round(du * (1 + majo / 100)), echeance: echeanceImpot(per), paiement, enCours: maintenant < per.fin };
+  }
+  let impotArme = null;
+  function panneauImpots() {
+    const lignes = [0, -1, -2, -3, -4].map(d => impotSemaine(periodeSemaine(d))).map(m => {
+      const etat = el('div', 'actions-ligne');
+      if (m.paiement) {
+        const p = el('span', 'pastille pastille-validee', m.paiement.horsSite ? 'Réglé hors du site' : `Payé le ${jour(m.paiement.date)}`);
+        p.title = `${m.paiement.horsSite ? 'Marqué' : prix.format(m.paiement.montant)} par ${m.paiement.par} le ${fmtDate(m.paiement.date)}`;
+        etat.append(p);
+      } else if (m.enCours) {
+        etat.append(el('span', 'pastille', 'Semaine en cours (estimation)'));
+      } else if (!m.total) {
+        etat.append(el('span', 'pastille pastille-validee', 'Rien à payer'));
+      } else {
+        etat.append(el('span', 'pastille ' + (m.majo ? 'pastille-refusee' : 'pastille-attente'), m.majo ? `En retard · +${m.majo} %` : 'À payer'));
+        const arme = impotArme === m.per.cle;
+        const b = el('button', 'btn btn-mini' + (arme ? ' btn-danger' : ''), arme ? 'Confirmer' : 'Marquer payé');
+        b.type = 'button';
+        b.addEventListener('click', () => {
+          if (!arme) { impotArme = m.per.cle; rendreEspace('espace-compta'); return; }
+          impotArme = null;
+          depensesApercu.unshift({
+            n: depensesApercu.length, date: new Date(), categorie: CAT_IMPOT,
+            libelle: `Impôts semaine ${m.per.libelle} · IS ${prix.format(m.is.montant)}${m.id ? ' + dividendes ' + prix.format(m.id) : ''}${m.majo ? ' + majoration ' + m.majo + ' %' : ''}`,
+            montant: m.total, par: identifiant, lien: 'impot', cle: m.per.cle,
+          });
+          journal('Comptabilité', 'Impôts payés', `${m.per.libelle} · ${prix.format(m.total)}`);
+          rendreEspace('espace-compta');
+        });
+        etat.append(b);
+        const deja = el('button', 'btn btn-mini btn-ghost', 'Déjà réglé');
+        deja.type = 'button';
+        deja.title = 'Impôt déjà payé avant l’utilisation du site : aucune dépense n’est créée';
+        deja.addEventListener('click', () => {
+          impotsReglesApercu.push({ id: 'imp-' + m.per.cle, cle: m.per.cle, montant: m.total, par: identifiant, le: new Date() });
+          journal('Comptabilité', 'Impôts marqués réglés hors du site', m.per.libelle);
+          rendreEspace('espace-compta');
+        });
+        etat.append(deja);
+      }
+      return [(m.enCours ? 'En cours · ' : '') + m.per.libelle.replace(/^du /, ''), prix.format(m.ca), prix.format(m.deductible), montantSigne(m.benefice),
+        `${prix.format(m.is.montant)} (${String(m.is.taux).replace('.', ',')} %)`, m.dividendes ? `${prix.format(m.id)} (sur ${prix.format(m.dividendes)})` : '—',
+        prix.format(m.total), fmtDate(m.echeance), etat];
+    });
+    const p = panneauAvec('Impôts · IRS (CTC art. 60 à 65)', tableau(['Semaine', "Chiffre d'affaires", 'Dépenses déductibles', 'Bénéfice', 'Impôt sur les sociétés', 'Impôt dividendes', 'Total à payer', 'Échéance', 'État'], lignes, ''));
+    p.append(el('p', 'calcul-detail panneau-pied', `Bénéfice = chiffre d'affaires (ventes, contrats, recettes hors apports) − dépenses déductibles. Barème : ${FISCAL.bareme === 'paliers' ? 'par paliers' : 'taux de la tranche appliqué à tout le bénéfice'}${FISCAL.matieres ? ' ; rachats et achats de neufs déduits comme matières premières' : ''} (réglable dans Paramètres). À payer au plus tard le mardi 23 h 59 ; au-delà, majoration de 20 à 50 %. « Marquer payé » ajoute la dépense « ${CAT_IMPOT} ». Les dividendes se saisissent en écriture de sortie « Dividendes ».`));
+    return p;
+  }
+  /* Paramètres (direction) : règles fiscales */
+  function panneauFiscal() {
+    const f = el('div', 'form-grille');
+    const ch = el('div', 'champ');
+    const l = el('label', null, 'Barème de l’impôt sur les sociétés');
+    l.htmlFor = 'fi-bareme';
+    const sel = el('select');
+    sel.id = 'fi-bareme';
+    sel.innerHTML = '<option value="tranche">Taux de la tranche sur tout le bénéfice (lecture littérale)</option><option value="paliers">Par paliers (chaque part du bénéfice à son taux)</option>';
+    sel.value = FISCAL.bareme;
+    ch.append(l, sel);
+    const caseM = el('label', 'case');
+    const cb = el('input');
+    cb.type = 'checkbox';
+    cb.checked = FISCAL.matieres;
+    caseM.append(cb, ' Rachats et achats de véhicules neufs = matières premières déductibles (art. 62-1)');
+    f.append(ch, caseM);
+    const msg = el('p', 'form-message');
+    msg.setAttribute('role', 'status');
+    const b = el('button', 'btn btn-sm', 'Enregistrer');
+    b.type = 'button';
+    b.addEventListener('click', () => {
+      FISCAL.bareme = sel.value;
+      FISCAL.matieres = cb.checked;
+      journal('Paramètres', 'Règles fiscales', `barème ${FISCAL.bareme === 'paliers' ? 'par paliers' : 'taux de la tranche'} · matières premières ${FISCAL.matieres ? 'déductibles' : 'non déductibles'}`);
+      rendreEspace('espace-parametres');
+    });
+    const pied = el('div', 'form-pied');
+    pied.append(msg, b);
+    const p = panneauAvec('Règles fiscales (CTC)', f);
+    p.append(pied);
+    return p;
+  }
+
   /* Paramètres (direction) : rémunération par rôle */
   function panneauRemuneration() {
     const champ = (valeur, label, desactive) => {
@@ -2015,6 +2148,7 @@
     const usage = {};
     [...depensesApercu].sort((a, b) => a.date - b.date || a.n - b.n).forEach(x => {
       const c = catDepense(x.categorie);
+      if (FISCAL.matieres && (x.categorie === CAT_RACHAT || x.categorie === CAT_ACHAT_NEUF)) { x.deductible = x.montant; x.regle = 'Matières premières (art. 62-1)'; return; }
       if (!c || x.categorie === CAT_RACHAT) { x.deductible = 0; x.regle = 'Non déductible'; return; }
       if (c.total) { x.deductible = x.montant; x.regle = ''; return; }
       if (!c.plafond) { x.deductible = null; x.regle = c.regle; return; }
@@ -2216,7 +2350,7 @@
         par.title = `Modifié par ${x.modifie.par} le ${fmtDate(x.modifie.le)}`;
       }
       const debut = [x.date.toLocaleDateString('fr-FR'), x.categorie, x.libelle, prix.format(x.montant), cellDeductible(x), celluleJustif(x), par];
-      if (x.lien) return [...debut, el('span', 'pastille pastille-attente', x.lien === 'paie' ? 'Auto · paie' : x.lien === 'neuf' ? 'Auto · vente neuf' : 'Auto · ' + x.lien.toUpperCase())];
+      if (x.lien) return [...debut, el('span', 'pastille pastille-attente', x.lien === 'paie' ? 'Auto · paie' : x.lien === 'neuf' ? 'Auto · vente neuf' : x.lien === 'impot' ? 'Auto · impôts' : 'Auto · ' + x.lien.toUpperCase())];
       const actions = el('div', 'actions-ligne');
       if (estPatron()) {
         const mod = el('button', 'btn btn-mini btn-ghost', 'Modifier');
@@ -2876,7 +3010,7 @@
   }
   /* Comptabilité : grand livre construit à partir des ventes/contrats validés, des dépenses et des écritures manuelles */
   const ecrituresApercu = [];
-  const CATEGORIES_ECRITURES = ['Solde de départ', 'Apport', 'Vente de pièces', 'Remboursement', 'Retrait', 'Régularisation'];
+  const CATEGORIES_ECRITURES = ['Solde de départ', 'Apport', 'Vente de pièces', 'Remboursement', 'Retrait', 'Régularisation', 'Dividendes'];
   let periodeCompta = 'semaine';
   let ecritureASupprimer = null;
   function periodeCompte() {
@@ -2895,7 +3029,7 @@
     const l = [
       ...ventesApercu.filter(v => v.statut === 'validee').map(v => ({ date: v.date, libelle: `${v.vehicule}${v.plaque ? ' · ' + v.plaque : ''} · ${v.client}`, categorie: 'Vente véhicule', origine: 'Vente', entree: v.prix, sortie: 0, par: v.vendeur })),
       ...contratsApercu.filter(v => v.statut === 'validee').map(v => ({ date: v.date, libelle: `Contrat ${v.vehicule} · ${v.client}`, categorie: 'Vente de contrat', origine: 'Contrat', entree: v.prix, sortie: 0, par: v.vendeur })),
-      ...depensesApercu.map(x => ({ date: x.date, libelle: x.libelle, categorie: x.categorie, origine: x.lien === 'paie' ? 'Paie' : x.lien === 'neuf' ? 'Achat neuf' : x.lien ? 'Rachat' : 'Dépense', entree: 0, sortie: x.montant, deductible: x.deductible || 0, par: x.par })),
+      ...depensesApercu.map(x => ({ date: x.date, libelle: x.libelle, categorie: x.categorie, origine: x.lien === 'paie' ? 'Paie' : x.lien === 'neuf' ? 'Achat neuf' : x.lien === 'impot' ? 'Impôts' : x.lien ? 'Rachat' : 'Dépense', entree: 0, sortie: x.montant, deductible: x.deductible || 0, par: x.par })),
       ...ecrituresApercu.map(x => ({ date: x.date, libelle: x.libelle, categorie: x.categorie, origine: x.lien === 'subvention' ? 'Subvention' : 'Écriture', entree: x.sens === 'entree' ? x.montant : 0, sortie: x.sens === 'sortie' ? x.montant : 0, par: x.par, ecriture: x })),
     ].sort((a, b) => a.date - b.date);
     let solde = 0;
@@ -3162,6 +3296,7 @@
     if (attente) blocs.push(el('p', 'note-reserve', `${attente} vente(s) ou contrat(s) en attente de validation sur la période : non comptés.`));
     blocs.push(resumeCompta(per));
     blocs.push(panneauSubventions());
+    blocs.push(panneauImpots());
 
     /* Répartition par catégorie */
     const parCat = {};
@@ -3282,6 +3417,13 @@
     equipeVisible().map(etatRH).filter(x => x.alerte).forEach(x => aFaire.push([x.alerte, lienEspace('Ouvrir l’équipe', 'espace-equipe')]));
     const nResa = reservationsApercu.filter(x => x.statut === 'nouvelle').length;
     if (nResa) aFaire.push([`${nResa} demande(s) de réservation à traiter`, el('span', 'calcul-detail', 'Voir « Demandes de réservation »')]);
+    const impPrec = impotSemaine(periodeSemaine(-1));
+    if (!impPrec.paiement && impPrec.total > 0) {
+      aFaire.push([impPrec.majo
+        ? `Impôts de la semaine ${impPrec.per.libelle} EN RETARD : ${prix.format(impPrec.total)} (majoration ${impPrec.majo} %)`
+        : `Impôts de la semaine ${impPrec.per.libelle} : ${prix.format(impPrec.total)} à payer avant le ${fmtDate(impPrec.echeance)}`,
+      lienEspace('Ouvrir la comptabilité', 'espace-compta')]);
+    }
     servicesOublies().forEach(x => aFaire.push([`${x.nom} en service depuis ${fmtDuree(new Date() - x.debut)} : badge de fin oublié ?`, boutonArretOubli(x)]));
     blocs.push(panneauAvec('À traiter', tableau(['Quoi', ''], aFaire, 'Rien à traiter pour le moment.')));
     blocs.push(panneauCloture());
@@ -4075,6 +4217,7 @@ ${f.ventes.length ? `<table><thead><tr><th>Date</th><th>Type</th><th>Vente</th><
         base: Math.max(0, ca + autres - t.deductible),
         justifs: deps.filter(x => x.justif).length, nbDeps: deps.length,
         subvention: sub.total, subventionRecue: sub.recu ? sub.recu.montant : 0,
+        fiscal: (m => ({ ca: m.ca, deductible: m.deductible, benefice: m.benefice, isMontant: m.is.montant, isTaux: m.is.taux, dividendes: m.dividendes, id: m.id, majo: m.majo, total: m.total, echeance: m.echeance, paye: m.paiement ? m.paiement.date : null, bareme: FISCAL.bareme }))(impotSemaine(per)),
       },
     };
   }
@@ -4150,7 +4293,16 @@ ${f.ventes.length ? `<table><thead><tr><th>Date</th><th>Type</th><th>Vente</th><
       ['dont salaires versés', i.salaires],
       ['dont rachats de véhicules', i.rachats],
       ['Résultat comptable', i.resultat],
-      ['Base imposable estimée (CA + autres entrées − charges déductibles, salaires compris)', i.base],
+      ...(i.fiscal ? [
+        ["Chiffre d'affaires fiscal (art. 60 a)", i.fiscal.ca],
+        ['Dépenses déductibles (art. 60 b, 62)', i.fiscal.deductible],
+        ['Bénéfice imposable (CA − dépenses déductibles)', i.fiscal.benefice],
+        [`Impôt sur les sociétés (art. 63-1, taux ${String(i.fiscal.isTaux).replace('.', ',')} %)`, i.fiscal.isMontant],
+        ['Dividendes distribués', i.fiscal.dividendes],
+        ['Impôt sur les dividendes (art. 64-2, 20 %)', i.fiscal.id],
+        ...(i.fiscal.majo ? [[`Majoration de retard (art. 65-1, ${i.fiscal.majo} %)`, i.fiscal.total - i.fiscal.isMontant - i.fiscal.id]] : []),
+        [`Total des impôts${i.fiscal.paye ? ' (payé le ' + jour(new Date(i.fiscal.paye)) + ')' : ' (à payer avant le ' + fmtDate(new Date(i.fiscal.echeance)) + ')'}`, i.fiscal.total],
+      ] : [['Base imposable estimée (CA + autres entrées − charges déductibles, salaires compris)', i.base]]),
     ];
     const etat = cloture ? `Semaine clôturée le ${fmtDate(new Date(cloture.le))} par ${cloture.par}` : 'Semaine non clôturée : chiffres calculés le ' + fmtDate(new Date());
     const table = x => `<h2>${esc(x.titre)}</h2>` + (x.lignes.length
@@ -4181,8 +4333,8 @@ ${ordre.map(n => b.tables.find(x => x.titre === n)).filter(Boolean).map(table).j
   function etatDonnees() {
     return structuredClone({
       pointages: pointagesApercu, ventes: ventesApercu, contrats: contratsApercu, rachats: rachatsApercu, depenses: depensesApercu,
-      paies: paiesApercu, ecritures: ecrituresApercu, vehicules, clotures: cloturesApercu, prixNeufs: prixNeufsCache, equipe: equipeApercu, comptes: comptesApercu, reservations: reservationsApercu, primes: primesApercu,
-      reglages: { marge: MARGE_REVENTE, taux: POSTES.map(p => [p.id, p.taux]), postes: etatPostes() },
+      paies: paiesApercu, ecritures: ecrituresApercu, vehicules, clotures: cloturesApercu, prixNeufs: prixNeufsCache, equipe: equipeApercu, comptes: comptesApercu, reservations: reservationsApercu, primes: primesApercu, impots: impotsReglesApercu,
+      reglages: { marge: MARGE_REVENTE, taux: POSTES.map(p => [p.id, p.taux]), postes: etatPostes(), fiscal: { ...FISCAL } },
     });
   }
   const resumeDonnees = d => `${(d.equipe || []).length} employé(s), ${(d.comptes || []).length} compte(s), ${d.ventes.length} vente(s), ${d.contrats.length} contrat(s), ${d.rachats.length} rachat(s), ${d.depenses.length} dépense(s), ${d.pointages.length} pointage(s), ${d.clotures.length} semaine(s) clôturée(s)`;
@@ -4207,12 +4359,14 @@ ${ordre.map(n => b.tables.find(x => x.titre === n)).filter(Boolean).map(table).j
     } else remplacer(comptesApercu, d.comptes);
     remplacer(reservationsApercu, d.reservations);
     remplacer(primesApercu, d.primes);
+    remplacer(impotsReglesApercu, d.impots);
     vehicules = structuredClone(d.vehicules || []);
     if (d.prixNeufs) prixNeufsCache = structuredClone(d.prixNeufs);
     if (d.reglages) {
       if (d.reglages.marge >= 0) MARGE_REVENTE = d.reglages.marge;
       (d.reglages.taux || []).forEach(([id, taux]) => { const p = POSTES.find(x => x.id === id); if (p && taux >= 0) p.taux = taux; });
       appliquerPostes(d.reglages.postes);
+      if (d.reglages.fiscal) Object.assign(FISCAL, d.reglages.fiscal);
     }
     demoChargee = [pointagesApercu, ventesApercu, depensesApercu, vehicules].some(t => t.some(x => x.demo));
     majBoutonsDemo();
@@ -4443,6 +4597,7 @@ ${ordre.map(n => b.tables.find(x => x.titre === n)).filter(Boolean).map(table).j
     if (c.reglages) blocs.push(bouton('Enregistrer les paramètres'));
     if (c.marge && estResponsable()) blocs.push(panneauMarge());
     if (c.remuneration && estPatron()) blocs.push(panneauRemuneration());
+    if (c.fiscal && estPatron()) blocs.push(panneauFiscal());
     if (c.prixVehicules) blocs.push(estResponsable() ? panneauPrix() : el('p', 'note-reserve', 'La modification des prix des véhicules est réservée aux managers et à la direction.'));
     if (c.calculateur) blocs.push(calculateurRachat());
     if (c.onglets) {
@@ -4577,7 +4732,7 @@ ${ordre.map(n => b.tables.find(x => x.titre === n)).filter(Boolean).map(table).j
     equipe: () => equipeApercu, comptes: () => comptesApercu, ventes: () => ventesApercu, contrats: () => contratsApercu,
     rachats: () => rachatsApercu, pointages: () => pointagesApercu, depenses: () => depensesApercu, paies: () => paiesApercu,
     ecritures: () => ecrituresApercu, clotures: () => cloturesApercu, reservations: () => reservationsApercu,
-    journal: () => journalApercu, sauvegardes: () => sauvegardesApercu, vehicules: () => vehicules, primes: () => primesApercu,
+    journal: () => journalApercu, sauvegardes: () => sauvegardesApercu, vehicules: () => vehicules, primes: () => primesApercu, impots: () => impotsReglesApercu,
   };
   const SECRETS = new Set(['mdp', 'hash', 'sel', '_id']);
   const idDe = x => String(x.id || x._id || (x._id = crypto.randomUUID()));
@@ -4599,11 +4754,12 @@ ${ordre.map(n => b.tables.find(x => x.titre === n)).filter(Boolean).map(table).j
     if (v && typeof v === 'object') { Object.keys(v).forEach(k => { v[k] = raviver(v[k]); }); return v; }
     return v;
   };
-  const reglagesEtat = () => ({ marge: MARGE_REVENTE, taux: POSTES.map(p => [p.id, p.taux]), postes: etatPostes() });
+  const reglagesEtat = () => ({ marge: MARGE_REVENTE, taux: POSTES.map(p => [p.id, p.taux]), postes: etatPostes(), fiscal: { ...FISCAL } });
   const appliquerReglages = d => {
     if (d.marge >= 0) MARGE_REVENTE = d.marge;
     (d.taux || []).forEach(([id, t]) => { const p = POSTES.find(x => x.id === id); if (p && t >= 0) p.taux = t; });
     appliquerPostes(d.postes);
+    if (d.fiscal) Object.assign(FISCAL, d.fiscal);
   };
   const versionServeur = {};
   let syncMinuteur = null;
