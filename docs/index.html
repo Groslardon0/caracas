@@ -69,7 +69,44 @@
     </section>
   </div>
 
-  <section data-view="catalogue" hidden>
+  <section data-view="catalogue" class="cat-page" hidden>
+    <div class="cat-decor" aria-hidden="true">
+      <svg viewBox="0 0 1440 330" preserveAspectRatio="xMaxYMax slice">
+        <defs>
+          <linearGradient id="cd-ciel" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" class="cd-ciel-haut"/>
+            <stop offset="1" class="cd-ciel-bas"/>
+          </linearGradient>
+        </defs>
+        <rect width="1440" height="206" fill="url(#cd-ciel)"/>
+        <path class="cd-mesa" d="M0 206 V184 H120 L140 168 H260 L278 188 H520 L540 176 H640 L660 192 H900 L930 156 H1010 L1030 138 H1150 L1170 164 H1300 L1320 178 H1440 V206 Z"/>
+        <rect class="cd-sol" y="205" width="1440" height="125"/>
+        <polygon class="cd-route" points="1071,206 1089,206 1440,330 720,330"/>
+        <path class="cd-bord" d="M1071 206 L720 330 M1089 206 L1440 330"/>
+        <g class="cd-ligne">
+          <polygon points="1079.6,209 1080.4,209 1080.6,213 1079.4,213"/>
+          <polygon points="1079.2,220 1080.8,220 1081.1,228 1078.9,228"/>
+          <polygon points="1078.6,238 1081.4,238 1081.9,252 1078.1,252"/>
+          <polygon points="1077.6,266 1082.4,266 1083.2,290 1076.8,290"/>
+          <polygon points="1076,306 1084,306 1085,330 1075,330"/>
+        </g>
+        <g class="cd-poteaux">
+          <path d="M610 330 V170 M592 182 H628 M890 262 V196 M882 201 H898 M985 232 V196 M980 199 H990 M1035 218 V198 M1031 200 H1039 M1058 211 V200"/>
+          <path class="cd-fil" d="M592 182 Q745 214 882 201 Q935 205 980 199 Q1010 203 1031 200 Q1046 203 1058 200 M628 182 Q765 216 898 201 Q945 205 990 199 Q1015 203 1039 200"/>
+        </g>
+        <g class="cd-cactus">
+          <path d="M250 318 V226 M250 270 H222 V238 M250 256 H280 V222"/>
+          <path d="M455 252 V214 M455 234 H443 V220 M455 228 H468 V212"/>
+          <path d="M1300 300 V236 M1300 272 H1278 V248 M1300 262 H1322 V240"/>
+        </g>
+        <g class="cd-panneau">
+          <path class="cd-poteau" d="M1188 304 V248"/>
+          <rect x="1156" y="214" width="64" height="36" rx="4"/>
+          <text x="1188" y="230" text-anchor="middle" class="cd-route-txt">ROUTE</text>
+          <text x="1188" y="246" text-anchor="middle" class="cd-num">68</text>
+        </g>
+      </svg>
+    </div>
     <div class="wrap section">
       <div class="section-tete">
         <p class="eyebrow">Catalogue</p>

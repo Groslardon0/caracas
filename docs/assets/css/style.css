@@ -589,3 +589,36 @@ p { margin: 0; }
 .rh-sanction strong { font-family: var(--f-label); text-transform: uppercase; letter-spacing: .08em; }
 .bandeau-apercu[data-etat="ok"] { background: var(--alamo); color: var(--blanc-sable); }
 .bandeau-apercu[data-etat="erreur"] { background: var(--rouille); color: var(--blanc-sable); }
+
+/* Catalogue : route 68 au crépuscule et lignes de carte topographique (différent de l'accueil) */
+.cat-page {
+  position: relative; overflow: hidden;
+  background:
+    repeating-radial-gradient(ellipse 60% 42% at 12% 38%, transparent 0 26px, color-mix(in srgb, var(--rocher) 20%, transparent) 26px 27px),
+    repeating-radial-gradient(ellipse 48% 36% at 92% 82%, transparent 0 30px, color-mix(in srgb, var(--rocher) 16%, transparent) 30px 31px),
+    var(--grain), var(--sable);
+}
+.cat-page > .wrap { position: relative; z-index: 1; }
+.cat-decor {
+  position: absolute; inset: 0 0 auto 0; height: clamp(200px, 26vw, 330px); pointer-events: none;
+  /* la scène reste à droite : le titre et le texte d'intro restent lisibles à gauche */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0 38%, #000 68%);
+  mask-image: linear-gradient(90deg, transparent 0 38%, #000 68%);
+}
+.cat-decor svg { width: 100%; height: 100%; display: block; }
+.cd-ciel-haut { stop-color: var(--sable); stop-opacity: 0; }
+.cd-ciel-bas { stop-color: color-mix(in srgb, var(--rouille) 38%, var(--panneau)); stop-opacity: .38; }
+.cd-mesa { fill: color-mix(in srgb, var(--rocher) 55%, var(--rouille)); opacity: .55; }
+.cd-sol { fill: var(--sable-fonce); }
+.cd-route { fill: color-mix(in srgb, var(--huile) 82%, var(--sable)); }
+.cd-bord { stroke: var(--sable-clair); stroke-width: 2; opacity: .55; fill: none; }
+.cd-ligne polygon { fill: var(--panneau); }
+.cd-poteaux path { stroke: color-mix(in srgb, var(--huile) 75%, var(--sable)); stroke-width: 3; fill: none; stroke-linecap: round; }
+.cd-poteaux .cd-fil { stroke-width: 1; opacity: .7; }
+.cd-cactus path { stroke: color-mix(in srgb, var(--huile) 55%, var(--rocher)); stroke-width: 12; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.cd-cactus path:nth-child(2) { stroke-width: 6; }
+.cd-panneau rect { fill: var(--panneau); stroke: var(--huile); stroke-width: 2; }
+.cd-panneau .cd-poteau { stroke: var(--huile); stroke-width: 4; }
+.cd-route-txt { font: 700 8px var(--f-label); letter-spacing: .14em; fill: var(--huile); }
+.cd-num { font: 400 16px var(--f-titre); fill: var(--huile); }
+@media (max-width: 700px) { .cat-decor { height: 210px; opacity: .3; } }
