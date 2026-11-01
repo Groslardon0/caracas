@@ -1,0 +1,5 @@
+qa-*.png
+node_modules/
+build/
+.claude/
+PROJET.md

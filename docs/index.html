@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Le Caracas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Le Caracas : véhicules neufs, occasions contrôlées et rachat de votre véhicule.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ultra&family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=Overpass+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="logo" href="#accueil" aria-label="Le Caracas, accueil">
+      <svg viewBox="0 0 34 34" aria-hidden="true"><rect x="1" y="1" width="32" height="32" rx="3" class="logo-cadre"/><circle cx="17" cy="19" r="8" class="logo-soleil"/><path d="M1 33 V25 H8 L10 22 H19 L21 25 H33 V33 Z" class="logo-mesa"/></svg>
+      <span class="logo-txt"><span class="logo-nom">CARACAS</span><span class="logo-sous">Sandy Shores · Blaine County</span></span>
+    </a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav" aria-label="Ouvrir le menu">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <nav id="nav" class="nav" aria-label="Navigation principale">
+      <a href="#accueil">Accueil</a>
+      <a href="#catalogue">Catalogue</a>
+      <a href="#contact">Contact</a>
+      <a class="nav-employe" href="#employes">Espace employé</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <div data-view="accueil">
+    <h1 class="sr-only">Le Caracas, concession de véhicules neufs et d'occasion</h1>
+    <section class="hero" aria-label="Véhicules à la une">
+      <div class="wrap hero-inner">
+        <div class="carrousel" id="carrousel" aria-roledescription="carrousel" aria-label="Véhicules à la une">
+          <div class="car-piste" id="car-piste"><p class="vide">Chargement des véhicules…</p></div>
+          <div class="car-ctrl">
+            <button class="car-btn" id="car-prec" type="button" aria-label="Véhicule précédent"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+            <div class="car-points" id="car-points"></div>
+            <button class="car-btn" id="car-suiv" type="button" aria-label="Véhicule suivant"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+            <p class="car-compteur" id="car-compteur"></p>
+          </div>
+        </div>
+      </div>
+      <div class="horizon" aria-hidden="true">
+        <svg viewBox="0 0 1440 260" preserveAspectRatio="xMidYMax slice">
+          <circle class="h-soleil" cx="1060" cy="150" r="92"/>
+          <path class="h-mesa" d="M0 260 V182 H90 L110 152 H260 L285 182 H420 L440 162 H520 L540 186 H760 L790 142 H980 L1000 122 H1120 L1150 166 H1300 L1320 152 H1440 V260 Z"/>
+          <path class="h-dune" d="M0 260 V222 Q180 200 360 216 T720 210 T1080 222 T1440 206 V260 Z"/>
+        </svg>
+      </div>
+    </section>
+
+    <section class="bande-surface">
+      <div class="wrap section">
+        <div class="section-tete ligne">
+          <div class="section-tete">
+            <p class="eyebrow">Arrivages</p>
+            <h2>Nouvelles voitures arrivées</h2>
+          </div>
+          <a class="lien" href="#catalogue">Tout le catalogue</a>
+        </div>
+        <div class="grille" id="arrivages"><p class="vide">Chargement des véhicules…</p></div>
+      </div>
+    </section>
+  </div>
+
+  <section data-view="catalogue" hidden>
+    <div class="wrap section">
+      <div class="section-tete">
+        <p class="eyebrow">Catalogue</p>
+        <h1 id="cat-titre">Véhicules neufs</h1>
+        <p class="lead" id="cat-intro"></p>
+      </div>
+      <form class="filtres" id="filtres" role="search" aria-label="Filtrer les véhicules">
+        <div class="segment" role="group" aria-label="Type de véhicule">
+          <a href="#neufs">Neufs</a>
+          <a href="#occasions">Occasions</a>
+          <a href="#catalogue">Tous</a>
+        </div>
+        <div class="champ champ-large">
+          <label for="f-recherche">Recherche</label>
+          <input id="f-recherche" type="search" placeholder="Marque ou modèle" autocomplete="off">
+        </div>
+        <div class="champ">
+          <label for="f-categorie">Catégorie</label>
+          <select id="f-categorie"><option value="">Toutes</option></select>
+        </div>
+        <div class="champ">
+          <label for="f-prix">Budget max</label>
+          <select id="f-prix">
+            <option value="">Sans limite</option>
+            <option value="25000">25 000 $</option>
+            <option value="50000">50 000 $</option>
+            <option value="100000">100 000 $</option>
+            <option value="250000">250 000 $</option>
+            <option value="500000">500 000 $</option>
+          </select>
+        </div>
+        <div class="champ">
+          <label for="f-tri">Trier par</label>
+          <select id="f-tri">
+            <option value="prix-asc">Prix croissant</option>
+            <option value="prix-desc">Prix décroissant</option>
+            <option value="recent">Plus récent</option>
+          </select>
+        </div>
+        <label class="case" for="f-vendus"><input id="f-vendus" type="checkbox" checked> Masquer les véhicules vendus</label>
+      </form>
+      <div class="resultats">
+        <div class="resultats-tete">
+          <p id="cat-compte" aria-live="polite"></p>
+          <button class="btn-texte" id="f-reset" type="button">Réinitialiser</button>
+        </div>
+        <div class="grille" id="cat-grille"><p class="vide">Chargement des véhicules…</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section data-view="connexion" hidden>
+    <div class="wrap section connexion">
+      <form class="boite-connexion" id="form-connexion" autocomplete="off">
+        <div class="section-tete">
+          <p class="eyebrow">Réservé au personnel</p>
+          <h1>Espace employé</h1>
+        </div>
+        <div class="champ">
+          <label for="c-id">Identifiant</label>
+          <input id="c-id" type="text" autocomplete="off" placeholder="ex. j.martinez">
+        </div>
+        <div class="champ">
+          <label for="c-mdp">Mot de passe</label>
+          <input id="c-mdp" type="password" autocomplete="off">
+        </div>
+        <button class="btn" type="submit">Se connecter</button>
+        <p class="form-message erreur" id="c-message" role="status"></p>
+        <p class="note-apercu">Dès qu'un compte existe (page Comptes), l'identifiant et le mot de passe sont vérifiés et donnent le rôle de la fiche Équipe. Sans aucun compte, mode aperçu : l'identifiant sert de nom. Aperçu : les données ne sont pas encore enregistrées en ligne. N'utilise pas un vrai mot de passe d'un autre site.</p>
+      </form>
+    </div>
+  </section>
+
+  <section data-view="espace" hidden>
+    <div class="espace">
+      <aside class="espace-nav">
+        <div class="espace-qui">
+          <p class="pied-titre">Connecté</p>
+          <p id="esp-qui">Aperçu · Employé</p>
+          <div class="role-apercu">
+            <label for="esp-poste">Voir en tant que</label>
+            <select id="esp-poste"></select>
+          </div>
+        </div>
+        <nav class="espace-liens" aria-label="Espace employé">
+          <p class="espace-groupe">Activité</p>
+          <a href="#espace">Tableau de bord</a>
+          <a href="#espace-ventes">Ventes</a>
+          <a href="#espace-rachats">Rachats</a>
+          <a href="#espace-stock">Stock</a>
+          <p class="espace-groupe">Argent</p>
+          <a href="#espace-paie">Paie</a>
+          <a href="#espace-depenses">Dépenses</a>
+          <a href="#espace-compta">Comptabilité</a>
+          <p class="espace-groupe">Gestion</p>
+          <a href="#espace-parametres">Paramètres</a>
+          <a href="#espace-badgeuse">Badgeuse</a>
+          <a href="#espace-historique">Historique</a>
+          <a href="#espace-equipe">Équipe</a>
+          <a href="#espace-comptes">Comptes</a>
+        </nav>
+        <div class="badge-rapide" id="badge-rapide">
+          <p class="pied-titre">Badgeuse</p>
+          <p class="badge-rapide-etat" id="br-etat" role="status">Hors service</p>
+          <button class="btn btn-sm" type="button" id="br-bouton">Prendre mon service</button>
+        </div>
+        <button class="btn-texte espace-sortie" id="deconnexion" type="button">Se déconnecter</button>
+      </aside>
+      <div class="espace-contenu">
+        <div class="bandeau-ligne">
+          <p class="bandeau-apercu" id="bandeau-apercu">Aperçu de l'espace employé : connexion et données pas encore branchées.</p>
+          <button class="btn btn-sm btn-ghost" type="button" id="demo-charger">Charger des données fictives</button>
+          <button class="btn btn-sm btn-ghost" type="button" id="demo-effacer" hidden>Effacer les données fictives</button>
+        </div>
+        <div class="section-tete">
+          <p class="eyebrow">Espace employé</p>
+          <h1 id="esp-titre">Tableau de bord</h1>
+          <p class="lead" id="esp-intro"></p>
+        </div>
+        <div class="esp-corps" id="esp-corps"></div>
+      </div>
+    </div>
+  </section>
+
+  <section data-view="soon" hidden>
+    <div class="wrap section soon">
+      <p class="eyebrow" id="soon-label"></p>
+      <h2>Page en préparation</h2>
+      <p class="lead">Cette page arrive dans une prochaine mise à jour du site.</p>
+      <div><a class="btn" href="#accueil">Retour à l'accueil</a></div>
+    </div>
+  </section>
+</main>
+
+<template id="tpl-calcul">
+  <form class="panneau calcul" novalidate>
+    <div class="panneau-tete"><h2 class="panneau-titre">Calculateur de rachat</h2></div>
+    <div class="calcul-corps">
+      <div class="form-grille calcul-champs">
+        <div class="champ champ-vehicule">
+          <label for="r-vehicule">Véhicule</label>
+          <input id="r-vehicule" type="text" list="r-liste" autocomplete="off" placeholder="Tape un nom de véhicule, le prix neuf se remplit">
+          <datalist id="r-liste"></datalist>
+        </div>
+        <div class="champ">
+          <label for="r-neuf">Prix neuf ($)</label>
+          <input id="r-neuf" type="number" min="0" step="500" inputmode="numeric" placeholder="ex. 50000">
+        </div>
+        <div class="champ">
+          <label for="r-taux">Taux de rachat (%)</label>
+          <input id="r-taux" type="number" min="0" max="100" step="1" inputmode="numeric">
+        </div>
+        <fieldset class="custom">
+          <legend>Customisation</legend>
+          <button class="btn btn-ghost btn-sm" id="r-full" type="button" aria-pressed="false">Full custom (= prix neuf)</button>
+          <div class="custom-options" id="r-options"></div>
+          <p class="custom-total">Total custom : <strong id="r-custom">0 $</strong></p>
+        </fieldset>
+      </div>
+      <div class="calcul-resultat" aria-live="polite">
+        <p class="tuile-label">Prix de rachat</p>
+        <p class="prix calcul-prix" id="r-resultat">—</p>
+        <p class="calcul-detail" id="r-detail">Entre le prix neuf pour calculer.</p>
+        <button class="btn btn-sombre btn-sm" id="r-devis" type="button" disabled>Faire un devis</button>
+        <p class="calcul-statut" id="r-devis-msg" role="status"></p>
+      </div>
+    </div>
+  </form>
+</template>
+
+<template id="tpl-rachat">
+  <form class="panneau form-vente" novalidate>
+    <div class="panneau-tete"><h2 class="panneau-titre">Nouveau rachat</h2></div>
+    <div class="form-grille">
+      <div class="champ">
+        <label for="ra-client">Nom et prénom du client</label>
+        <input id="ra-client" type="text" autocomplete="off" placeholder="ex. Travis Cole">
+      </div>
+      <div class="champ">
+        <label for="ra-modele">Modèle</label>
+        <input id="ra-modele" type="text" list="ra-liste" autocomplete="off" placeholder="Marque ou modèle">
+        <datalist id="ra-liste"></datalist>
+      </div>
+      <div class="champ">
+        <label for="ra-prix">Prix de rachat ($)</label>
+        <input id="ra-prix" type="number" min="0" step="100" inputmode="numeric">
+      </div>
+      <div class="champ">
+        <label for="ra-plaque">Plaque d'immatriculation</label>
+        <input id="ra-plaque" class="plaque-input" type="text" maxlength="8" autocomplete="off" placeholder="ex. 46EEK572">
+      </div>
+      <div class="champ">
+        <label for="ra-revente">Prix de revente catalogue ($)</label>
+        <input id="ra-revente" type="number" min="0" step="100" inputmode="numeric">
+        <p class="calcul-detail ra-marge" id="ra-marge"></p>
+      </div>
+      <div class="champ ra-reprendre">
+        <button class="btn btn-ghost btn-sm" type="button" id="ra-reprendre">Reprendre le calcul</button>
+      </div>
+      <div class="champ champ-photo">
+        <label for="ra-photo">Photo du véhicule (facultatif)</label>
+        <input id="ra-photo" type="file" accept="image/*">
+        <div class="photo-zone" id="ra-zone" hidden>
+          <img class="photo-apercu" id="ra-apercu" alt="Aperçu de la photo du véhicule">
+          <button class="btn btn-ghost btn-sm" type="button" id="ra-retirer">Retirer la photo</button>
+        </div>
+      </div>
+    </div>
+    <div class="form-pied">
+      <p class="form-message" id="ra-message" role="status"></p>
+      <button class="btn" type="submit">Enregistrer le rachat</button>
+    </div>
+  </form>
+</template>
+
+<template id="tpl-contrat">
+  <form class="panneau form-vente" novalidate>
+    <div class="panneau-tete"><h2 class="panneau-titre">Nouvelle vente de contrat</h2></div>
+    <div class="form-grille">
+      <div class="champ">
+        <label for="co-client">Nom et prénom du client</label>
+        <input id="co-client" type="text" autocomplete="off" placeholder="ex. Travis Cole">
+      </div>
+      <div class="champ">
+        <label for="co-vehicule">Véhicule</label>
+        <input id="co-vehicule" type="text" list="co-liste" autocomplete="off" placeholder="Tape un nom de véhicule">
+        <datalist id="co-liste"></datalist>
+      </div>
+      <div class="champ">
+        <label for="co-prix">Prix du contrat ($)</label>
+        <input id="co-prix" type="text" readonly tabindex="-1" placeholder="Choisis un véhicule">
+      </div>
+    </div>
+    <div class="form-pied">
+      <p class="form-message" id="co-message" role="status"></p>
+      <p class="calcul-detail co-detail" id="co-detail"></p>
+      <button class="btn" type="submit">Enregistrer le contrat</button>
+    </div>
+  </form>
+</template>
+
+<template id="tpl-depense">
+  <form class="panneau form-vente" novalidate>
+    <div class="panneau-tete"><h2 class="panneau-titre">Nouvelle dépense</h2></div>
+    <div class="form-grille">
+      <div class="champ">
+        <label for="de-date">Date</label>
+        <input id="de-date" type="date">
+      </div>
+      <div class="champ">
+        <label for="de-cat">Catégorie</label>
+        <input id="de-cat" type="text" list="de-liste" autocomplete="off" placeholder="Choisis ou écris">
+        <datalist id="de-liste"></datalist>
+      </div>
+      <div class="champ">
+        <label for="de-libelle">Libellé</label>
+        <input id="de-libelle" type="text" autocomplete="off" placeholder="ex. Loyer d'octobre">
+      </div>
+      <div class="champ">
+        <label for="de-montant">Montant ($)</label>
+        <input id="de-montant" type="number" min="0" step="100" inputmode="numeric">
+      </div>
+    </div>
+    <div class="form-grille de-fichier">
+      <div class="champ champ-photo">
+        <label for="de-justif">Justificatif (capture d'écran, facultatif)</label>
+        <input id="de-justif" type="file" accept="image/*">
+        <div class="photo-zone" id="de-zone" hidden>
+          <img class="photo-apercu" id="de-apercu" alt="Aperçu du justificatif">
+          <button class="btn btn-ghost btn-sm" type="button" id="de-retirer">Retirer le fichier</button>
+        </div>
+      </div>
+    </div>
+    <p class="calcul-detail de-aide" id="de-aide"></p>
+    <div class="form-pied">
+      <p class="form-message" id="de-message" role="status"></p>
+      <button class="btn" type="submit">Enregistrer la dépense</button>
+    </div>
+  </form>
+</template>
+
+<template id="tpl-ecriture">
+  <form class="panneau form-vente" novalidate>
+    <div class="panneau-tete"><h2 class="panneau-titre">Nouvelle écriture</h2></div>
+    <div class="form-grille">
+      <div class="champ">
+        <label for="ec-date">Date</label>
+        <input id="ec-date" type="date">
+      </div>
+      <div class="champ">
+        <label for="ec-sens">Sens</label>
+        <select id="ec-sens"><option value="entree">Entrée d'argent</option><option value="sortie">Sortie d'argent</option></select>
+      </div>
+      <div class="champ">
+        <label for="ec-cat">Catégorie</label>
+        <input id="ec-cat" type="text" list="ec-liste" autocomplete="off" placeholder="Choisis ou écris">
+        <datalist id="ec-liste"></datalist>
+      </div>
+      <div class="champ">
+        <label for="ec-libelle">Libellé</label>
+        <input id="ec-libelle" type="text" autocomplete="off" placeholder="ex. Apport du patron">
+      </div>
+      <div class="champ">
+        <label for="ec-montant">Montant ($)</label>
+        <input id="ec-montant" type="number" min="0" step="100" inputmode="numeric">
+      </div>
+    </div>
+    <p class="calcul-detail">Pour les apports, le solde de départ ou les corrections. Les achats et frais se saisissent dans Dépenses (plafonds déductibles) ; ventes, rachats et paies s'ajoutent tout seuls.</p>
+    <div class="form-pied">
+      <p class="form-message" id="ec-message" role="status"></p>
+      <button class="btn" type="submit">Enregistrer l'écriture</button>
+    </div>
+  </form>
+</template>
+
+<template id="tpl-vente">
+  <form class="panneau form-vente" novalidate>
+    <div class="panneau-tete"><h2 class="panneau-titre">Nouvelle vente</h2></div>
+    <div class="form-grille">
+      <div class="champ">
+        <label for="v-client">Nom et prénom du client</label>
+        <input id="v-client" type="text" autocomplete="off" placeholder="ex. Travis Cole">
+      </div>
+      <div class="champ">
+        <label for="v-vehicule">Véhicule</label>
+        <input id="v-vehicule" type="text" list="v-vehicules-liste" autocomplete="off" placeholder="Marque ou modèle">
+        <datalist id="v-vehicules-liste"></datalist>
+      </div>
+      <div class="champ">
+        <label for="v-plaque">Plaque d'immatriculation</label>
+        <input id="v-plaque" class="plaque-input" type="text" maxlength="8" autocomplete="off" placeholder="ex. 46EEK572">
+      </div>
+      <div class="champ">
+        <label for="v-prix">Prix de vente ($)</label>
+        <input id="v-prix" type="number" min="0" step="100" inputmode="numeric">
+      </div>
+    </div>
+    <div class="form-pied">
+      <p class="form-message" id="v-message" role="status"></p>
+      <button class="btn" type="submit">Enregistrer la vente</button>
+    </div>
+  </form>
+</template>
+
+<dialog class="dlg dlg-devis" id="dlg-taux" aria-labelledby="taux-titre">
+  <form class="dlg-corps" id="form-taux" novalidate>
+    <div>
+      <p class="eyebrow">Paie</p>
+      <h2 class="dlg-titre" id="taux-titre">Taux horaires par grade</h2>
+    </div>
+    <div class="taux-liste" id="taux-liste"></div>
+    <p class="form-message" id="taux-message" role="status"></p>
+    <div class="devis-actions">
+      <button class="btn btn-ghost" type="button" id="taux-annuler">Annuler</button>
+      <button class="btn" type="submit">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="dlg dlg-devis dlg-rh" id="dlg-rh" aria-labelledby="rh-titre">
+  <form class="dlg-corps" id="form-rh" novalidate>
+    <div>
+      <p class="eyebrow">Dossier RH · Code du travail et du commerce</p>
+      <h2 class="dlg-titre" id="rh-titre">Dossier</h2>
+    </div>
+    <p class="calcul-detail" id="rh-etat"></p>
+    <div class="em-grille">
+      <div class="champ">
+        <label for="rh-contrat">Type de contrat</label>
+        <select id="rh-contrat"><option value="CDI">CDI</option><option value="CDD">CDD (15 jours maximum)</option></select>
+      </div>
+      <div class="champ">
+        <label for="rh-debut">Début du contrat (1er jour)</label>
+        <input id="rh-debut" type="date">
+      </div>
+      <div class="champ" id="rh-fin-zone">
+        <label for="rh-fin">Fin du CDD</label>
+        <input id="rh-fin" type="date">
+      </div>
+      <div class="champ">
+        <label for="rh-signe">Contrat signé le</label>
+        <input id="rh-signe" type="date">
+      </div>
+    </div>
+    <p class="calcul-detail" id="rh-aide">Période d'essai de 7 jours ; le contrat doit être signé au plus tard à la fin de l'essai. Nouveau contrat à chaque promotion.</p>
+    <p class="form-message" id="rh-message" role="status"></p>
+    <div class="devis-actions">
+      <button class="btn btn-ghost" type="button" id="rh-annuler">Fermer</button>
+      <button class="btn" type="submit">Enregistrer le contrat</button>
+    </div>
+    <div class="rh-sanctions">
+      <h3 class="rh-sous-titre">Sanctions</h3>
+      <div id="rh-liste"></div>
+      <div class="em-grille">
+        <div class="champ">
+          <label for="rh-s-type">Sanction</label>
+          <select id="rh-s-type"><option>Avertissement</option><option>Mise à pied</option><option>Rétrogradation</option><option>Rupture du contrat</option></select>
+        </div>
+        <div class="champ em-large">
+          <label for="rh-s-motif">Motif (obligatoire, écrit)</label>
+          <input id="rh-s-motif" type="text" autocomplete="off" placeholder="ex. Retards répétés malgré un rappel">
+        </div>
+      </div>
+      <p class="form-message" id="rh-s-message" role="status"></p>
+      <div class="devis-actions"><button class="btn btn-sm" type="button" id="rh-s-ajouter">Ajouter la sanction</button></div>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="dlg dlg-devis" id="dlg-reservation" aria-labelledby="rs-titre">
+  <form class="dlg-corps" id="form-reservation" novalidate>
+    <div>
+      <p class="eyebrow">Demande de réservation</p>
+      <h2 class="dlg-titre" id="rs-titre">Véhicule</h2>
+    </div>
+    <p class="devis-resume" id="rs-resume"></p>
+    <div class="champ">
+      <label for="rs-nom">Nom et prénom</label>
+      <input id="rs-nom" type="text" autocomplete="off" placeholder="ex. Travis Cole">
+    </div>
+    <div class="champ">
+      <label for="rs-tel">Téléphone en jeu</label>
+      <input id="rs-tel" type="tel" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="555-0142">
+    </div>
+    <div class="champ">
+      <label for="rs-message">Message (facultatif)</label>
+      <input id="rs-message" type="text" autocomplete="off" placeholder="ex. Disponible ce soir après 20 h">
+    </div>
+    <p class="form-message" id="rs-retour" role="status"></p>
+    <div class="devis-actions">
+      <button class="btn btn-ghost" type="button" id="rs-annuler">Annuler</button>
+      <button class="btn" type="submit" id="rs-envoyer">Envoyer la demande</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="dlg dlg-devis" id="dlg-compte" aria-labelledby="cp-titre">
+  <form class="dlg-corps" id="form-compte" novalidate autocomplete="off">
+    <div>
+      <p class="eyebrow">Comptes</p>
+      <h2 class="dlg-titre" id="cp-titre">Nouveau compte</h2>
+    </div>
+    <div class="em-grille">
+      <div class="champ em-large">
+        <label for="cp-employe">Employé (fiche Équipe)</label>
+        <select id="cp-employe"></select>
+      </div>
+      <div class="champ em-large">
+        <label for="cp-id">Identifiant de connexion</label>
+        <input id="cp-id" type="text" autocomplete="off" spellcheck="false" placeholder="ex. marco.delgado">
+      </div>
+      <div class="champ">
+        <label for="cp-mdp" id="cp-mdp-label">Mot de passe</label>
+        <input id="cp-mdp" type="password" autocomplete="new-password">
+      </div>
+      <div class="champ">
+        <label for="cp-mdp2">Confirmation</label>
+        <input id="cp-mdp2" type="password" autocomplete="new-password">
+      </div>
+      <label class="case em-large" for="cp-actif" id="cp-actif-zone"><input id="cp-actif" type="checkbox" checked> Compte actif (peut se connecter)</label>
+    </div>
+    <p class="calcul-detail" id="cp-aide">6 caractères minimum. Seul le patron peut voir les mots de passe. Utilise un mot de passe propre au Caracas.</p>
+    <p class="form-message" id="cp-message" role="status"></p>
+    <div class="devis-actions">
+      <button class="btn btn-ghost" type="button" id="cp-supprimer" hidden>Supprimer le compte</button>
+      <button class="btn btn-ghost" type="button" id="cp-annuler">Annuler</button>
+      <button class="btn" type="submit" id="cp-valider">Créer le compte</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="dlg dlg-devis" id="dlg-employe" aria-labelledby="em-titre">
+  <form class="dlg-corps" id="form-employe" novalidate>
+    <div>
+      <p class="eyebrow">Équipe</p>
+      <h2 class="dlg-titre" id="em-titre">Nouvel employé</h2>
+    </div>
+    <div class="em-grille">
+      <div class="champ">
+        <label for="em-nom">Nom</label>
+        <input id="em-nom" type="text" autocomplete="off" placeholder="ex. Delgado">
+      </div>
+      <div class="champ">
+        <label for="em-prenom">Prénom</label>
+        <input id="em-prenom" type="text" autocomplete="off" placeholder="ex. Marco">
+      </div>
+      <div class="champ">
+        <label for="em-tel">Téléphone</label>
+        <input id="em-tel" type="tel" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="555-0142">
+      </div>
+      <div class="champ">
+        <label for="em-role">Rôle</label>
+        <select id="em-role"></select>
+      </div>
+      <div class="champ em-large">
+        <label for="em-rib">RIB</label>
+        <input id="em-rib" type="text" autocomplete="off" spellcheck="false" placeholder="Numéro de compte bancaire en jeu">
+      </div>
+    </div>
+    <p class="form-message" id="em-message" role="status"></p>
+    <div class="devis-actions">
+      <button class="btn btn-ghost btn-danger-texte" type="button" id="em-supprimer" hidden>Retirer de l'équipe</button>
+      <button class="btn btn-ghost" type="button" id="em-annuler">Annuler</button>
+      <button class="btn" type="submit" id="em-valider">Ajouter</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="dlg dlg-devis dlg-export" id="dlg-export" aria-labelledby="export-titre">
+  <div class="dlg-corps">
+    <div>
+      <p class="eyebrow">Comptabilité</p>
+      <h2 class="dlg-titre" id="export-titre">Exporter le grand livre</h2>
+    </div>
+    <p class="devis-resume" id="export-aide">Le téléchargement n'est pas disponible ici. Copie le tableau puis colle-le dans Google Sheets ou Excel (cellule A1) : les colonnes se placent toutes seules.</p>
+    <div class="champ">
+      <label for="export-texte">Contenu du grand livre</label>
+      <textarea id="export-texte" rows="8" readonly spellcheck="false"></textarea>
+    </div>
+    <p class="form-message" id="export-message" role="status"></p>
+    <div class="devis-actions">
+      <button class="btn btn-ghost" type="button" id="export-fermer">Fermer</button>
+      <button class="btn btn-ghost" type="button" id="export-fichier">Télécharger le fichier</button>
+      <button class="btn" type="button" id="export-copier">Copier le tableau</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="dlg dlg-devis" id="dlg-devis" aria-labelledby="devis-titre">
+  <form class="dlg-corps" id="form-devis" novalidate>
+    <div>
+      <p class="eyebrow">Devis de rachat pour la direction</p>
+      <h2 class="dlg-titre" id="devis-titre">Client</h2>
+    </div>
+    <p class="devis-resume" id="devis-resume"></p>
+    <div class="champ">
+      <label for="d-nom">Nom et prénom du client</label>
+      <input id="d-nom" type="text" autocomplete="off" placeholder="ex. Travis Cole">
+    </div>
+    <div class="champ">
+      <label for="d-tel">Téléphone</label>
+      <input id="d-tel" type="tel" autocomplete="off" placeholder="ex. 555-0142">
+    </div>
+    <p class="form-message" id="d-message" role="status"></p>
+    <div class="devis-actions">
+      <button class="btn btn-ghost" type="button" id="d-annuler">Annuler</button>
+      <button class="btn" type="submit" id="d-valider">Télécharger le devis (JPEG)</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="dlg dlg-photo" id="dlg-photo" aria-label="Photo du véhicule">
+  <button class="dlg-fermer" type="button" id="photo-fermer" aria-label="Fermer la photo">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+  <img id="photo-grande" alt="">
+  <div class="photo-actions">
+    <p class="photo-info" id="photo-info"></p>
+    <button class="btn btn-sm btn-danger" type="button" id="photo-supprimer">Supprimer la photo</button>
+  </div>
+</dialog>
+
+<dialog class="dlg" id="fiche-vehicule" aria-labelledby="dlg-titre">
+  <button class="dlg-fermer" type="button" aria-label="Fermer la fiche">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+  <div class="dlg-visuel" id="dlg-visuel"></div>
+  <div class="dlg-corps">
+    <div>
+      <p class="carte-marque" id="dlg-marque"></p>
+      <h2 class="dlg-titre" id="dlg-titre"></h2>
+    </div>
+    <p class="dlg-desc" id="dlg-desc"></p>
+    <dl class="specs specs-3" id="dlg-specs"></dl>
+    <div class="fiche-bas">
+      <p class="prix" id="dlg-prix"></p>
+      <button class="btn" type="button" id="dlg-cta">Réserver ce véhicule</button>
+    </div>
+    <p class="dlg-ref" id="dlg-ref"></p>
+  </div>
+</dialog>
+
+<footer class="pied">
+  <div class="wrap pied-inner">
+    <div class="pied-col">
+      <p class="pied-titre">Le Caracas</p>
+      <p>Concession de véhicules neufs, occasions et rachat, à Sandy Shores.</p>
+    </div>
+    <div class="pied-col">
+      <p class="pied-titre">Horaires</p>
+      <p>À compléter</p>
+    </div>
+    <div class="pied-col">
+      <p class="pied-titre">Contact</p>
+      <p>Téléphone en jeu : à compléter</p>
+      <p>Sandy Shores, Blaine County (adresse exacte à compléter)</p>
+    </div>
+    <nav class="pied-col pied-nav" aria-label="Pied de page">
+      <p class="pied-titre">Navigation</p>
+      <a href="#accueil">Accueil</a>
+      <a href="#catalogue">Catalogue</a>
+      <a href="#contact">Contact</a>
+    </nav>
+  </div>
+  <div class="wrap pied-bas"><p>Le Caracas · entreprise du serveur RP Limitless · <a href="#employes">Espace employé</a></p></div>
+</footer>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/main.js"></script>
+</body>
+</html>
