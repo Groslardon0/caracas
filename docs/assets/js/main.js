@@ -1395,10 +1395,11 @@
       f.poste = f.posteEquipe || f.poste || 'vendeur';
       const P = POSTES.find(p => p.id === f.poste) || {};
       f.fixe = P.fixe ? P.fixe * nbSem : 0;
-      f.brut = f.salaireHoraire + f.fixe + f.commission + f.primes;
+      /* Salaire max (CTC art. 40) sur heures + fixe + commissions ; les primes (art. 41) s'ajoutent en plus */
+      f.brut = f.salaireHoraire + f.fixe + f.commission;
       f.plafond = P.max ? P.max * nbSem : 0;
-      f.total = f.plafond ? Math.min(f.brut, f.plafond) : f.brut;
-      f.plafonne = f.brut > f.total;
+      f.plafonne = !!f.plafond && f.brut > f.plafond;
+      f.total = (f.plafonne ? f.plafond : f.brut) + f.primes;
       f.paye = paiesApercu.find(p => p.cle === per.cle && memeNom(p.nom, f.nom));
       return f;
     }).filter(f => f.poste !== 'admin').sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
@@ -1782,17 +1783,79 @@
     pied.append(msg, b);
     const p = panneauAvec('Rémunération par rôle', tableau(['Rôle', 'Taux horaire ($/h)', 'Commission (%)', 'Salaire max / semaine ($)', 'Salaire fixe / semaine ($)'],
       entrees.map(x => [x.p.nom, x.taux, x.commission, x.max, x.fixe || '—']), ''));
-    p.append(el('p', 'calcul-detail panneau-pied', 'Le salaire max plafonne le total de la semaine (heures + commissions + primes). Le comptable a un salaire fixe et n’est pas commissionné.'), pied);
+    p.append(el('p', 'calcul-detail panneau-pied', 'Le salaire max plafonne heures + salaire fixe + commissions de la semaine ; les primes (CTC art. 41) s’ajoutent en plus. Le comptable a un salaire fixe et n’est pas commissionné.'), pied);
     return p;
   }
 
-  /* Paie (direction) : primes de la semaine, motivées par écrit, dans la limite du salaire max du rôle */
+  /* ---------- Primes selon le Code du travail et du commerce (art. 41) ----------
+     41-1 hebdomadaire : enveloppe = % du chiffre d'affaires de la semaine selon sa tranche ; 33 % des salariés au plus ; 5 000 $ max par salarié.
+     41-2 exceptionnelle mensuelle : toutes les 4 semaines complètes, enveloppe = % du bénéfice net des 4 semaines selon sa tranche (avec maximum),
+     bénéfice net positif et d'au moins 5 000 $, un versement par mois, à répartir entre les salariés. */
   const primesApercu = [];
   let primeArmee = null;
+  const PRIME_HEBDO = { tranches: [[10000, 50], [50000, 30], [100000, 10], [300000, 1], [Infinity, 0.5]], parSalarie: 5000, partSalaries: 33 };
+  const PRIME_MENSUELLE = { minimum: 5000, tranches: [[150000, 30, 45000], [300000, 17, 51000], [600000, 10, 60000], [900000, 8, 72000], [Infinity, 6.5, 91000]] };
+  const typePrime = p => p.type || 'hebdo';
+  const caPeriode = per => [...ventesApercu, ...contratsApercu].filter(v => v.statut === 'validee' && v.date >= per.debut && v.date < per.fin).reduce((t, v) => t + v.prix, 0);
+  function enveloppeHebdo(per) {
+    const ca = caPeriode(per);
+    const [, taux] = PRIME_HEBDO.tranches.find(([haut]) => ca <= haut);
+    return { ca, taux, montant: ca > 0 ? Math.floor(ca * taux / 100) : 0 };
+  }
+  /* Bloc mensuel : les 4 semaines complètes qui précèdent la semaine de la paie */
+  function enveloppeMensuelle(perPaie) {
+    const debut = new Date(perPaie.debut.getTime() - 28 * JOUR_MS);
+    const livre = grandLivre().filter(x => x.date >= debut && x.date < perPaie.debut);
+    const t = totaux(livre);
+    const benefice = t.entree - t.sortie;
+    if (benefice < PRIME_MENSUELLE.minimum) return { debut, fin: perPaie.debut, benefice, taux: 0, montant: 0 };
+    const [, taux, max] = PRIME_MENSUELLE.tranches.find(([haut]) => benefice <= haut);
+    return { debut, fin: perPaie.debut, benefice, taux, max, montant: Math.min(max, Math.floor(benefice * taux / 100)) };
+  }
   function panneauPrimes(per, fiches) {
+    const hebdo = enveloppeHebdo(per);
+    const mens = enveloppeMensuelle(per);
+    const bloc = per.cle;
+    const duBloc = primesApercu.filter(p => typePrime(p) === 'mensuelle' && p.bloc === bloc);
+    const dernierAutre = primesApercu.filter(p => typePrime(p) === 'mensuelle' && p.bloc !== bloc).map(p => new Date(p.semaine)).sort((x, y) => y - x)[0];
+    const mensuelleAutorisee = !dernierAutre || per.debut - dernierAutre >= 28 * JOUR_MS;
+    const semaine = primesApercu.filter(p => typePrime(p) === 'hebdo' && p.semaine >= per.debut && p.semaine < per.fin);
+    const utiliseHebdo = semaine.reduce((t, p) => t + p.montant, 0);
+    const beneficiaires = new Set(semaine.map(p => p.nom.toLowerCase()));
+    const maxBeneficiaires = Math.floor(fiches.length * PRIME_HEBDO.partSalaries / 100);
+    const utiliseMens = duBloc.reduce((t, p) => t + p.montant, 0);
+
+    const info = el('div', 'resume-grille');
+    const carte = (titre, lignes) => {
+      const dl = el('dl', 'specs resume-specs');
+      lignes.forEach(([k, v]) => { const d = el('div'); d.append(el('dt', null, k), el('dd', null, v)); dl.append(d); });
+      return panneauAvec(titre, dl);
+    };
+    info.append(
+      carte('Prime hebdomadaire · art. 41-1', [
+        ["Chiffre d'affaires de la semaine", prix.format(hebdo.ca)],
+        ['Enveloppe', `${prix.format(hebdo.montant)} (${String(hebdo.taux).replace('.', ',')} % du CA)`],
+        ['Déjà accordé', prix.format(utiliseHebdo)],
+        ['Reste', prix.format(Math.max(0, hebdo.montant - utiliseHebdo))],
+        ['Bénéficiaires', `${beneficiaires.size} / ${maxBeneficiaires} (33 % des salariés)`],
+        ['Maximum par salarié', prix.format(PRIME_HEBDO.parSalarie)],
+      ]),
+      carte('Prime exceptionnelle mensuelle · art. 41-2', [
+        ['Période', `du ${jour(mens.debut)} au ${jour(new Date(mens.fin - 1))} (4 semaines)`],
+        ['Bénéfice net', prix.format(mens.benefice)],
+        ['Enveloppe', mens.montant ? `${prix.format(mens.montant)} (${String(mens.taux).replace('.', ',')} %, max ${prix.format(mens.max)})` : 'Aucune (bénéfice < 5 000 $)'],
+        ['Déjà répartie', prix.format(utiliseMens)],
+        ['Reste', prix.format(Math.max(0, mens.montant - utiliseMens))],
+        ['Disponible', mensuelleAutorisee ? 'Oui' : `Non : déjà versée le mois dernier (${jour(dernierAutre)})`],
+      ]),
+    );
+
     const f = el('form', 'form-grille');
     f.noValidate = true;
     const ch = (label, input) => { const d = el('div', 'champ'); const l = el('label', null, label); l.htmlFor = input.id; d.append(l, input); f.append(d); return input; };
+    const type = el('select');
+    type.id = 'pr-type';
+    type.innerHTML = '<option value="hebdo">Hebdomadaire (art. 41-1)</option><option value="mensuelle">Exceptionnelle mensuelle (art. 41-2)</option>';
     const sel = el('select');
     sel.id = 'pr-employe';
     fiches.forEach(x => { const o = el('option', null, `${x.nom} · ${nomPoste(x.poste)}`); o.value = x.nom; sel.append(o); });
@@ -1800,23 +1863,16 @@
     montant.id = 'pr-montant';
     montant.type = 'number';
     montant.min = '0';
-    montant.step = '500';
+    montant.step = '100';
     montant.inputMode = 'numeric';
     const motif = el('input');
     motif.id = 'pr-motif';
     motif.placeholder = 'ex. Objectif de ventes atteint';
     motif.autocomplete = 'off';
+    ch('Type de prime', type);
     ch('Employé', sel);
     ch('Montant ($)', montant);
     ch('Motif (obligatoire)', motif);
-    const aide = el('p', 'calcul-detail');
-    const majAide = () => {
-      const x = fiches.find(y => y.nom === sel.value);
-      aide.textContent = !x ? '' : x.paye ? `La paie de ${x.nom} est déjà versée pour cette semaine.`
-        : x.plafond ? `Marge avant le salaire max (${prix.format(x.plafond)}) : ${prix.format(Math.max(0, x.plafond - x.brut))}.` : '';
-    };
-    sel.addEventListener('change', majAide);
-    majAide();
     const msg = el('p', 'form-message');
     msg.setAttribute('role', 'status');
     const b = el('button', 'btn btn-sm', 'Accorder la prime');
@@ -1827,19 +1883,29 @@
       ev.preventDefault();
       const x = fiches.find(y => y.nom === sel.value);
       const m = Math.round(Number(montant.value));
-      msg.className = 'form-message erreur';
-      if (!x) { msg.textContent = 'Choisis un employé.'; return; }
-      if (x.paye) { msg.textContent = 'Paie déjà versée cette semaine : la prime ne peut plus être ajoutée.'; return; }
-      if (!(m > 0)) { msg.textContent = 'Indique un montant.'; return; }
-      if (motif.value.trim().length < 5) { msg.textContent = 'Une prime doit être motivée par écrit (5 caractères minimum).'; return; }
-      if (x.plafond && x.brut + m > x.plafond) { msg.textContent = `Prime refusée : elle dépasserait le salaire max du rôle (${prix.format(x.plafond)}). Reste possible : ${prix.format(Math.max(0, x.plafond - x.brut))}.`; return; }
-      primesApercu.unshift({ id: 'pr-' + Date.now().toString(36), nom: x.nom, semaine: per.debut, montant: m, motif: motif.value.trim(), par: identifiant, le: new Date() });
-      journal('Paie', 'Prime accordée', `${x.nom} · ${prix.format(m)} · ${motif.value.trim()} · ${per.libelle}`);
+      const refus = t => { msg.className = 'form-message erreur'; msg.textContent = t; };
+      if (!x) return refus('Choisis un employé.');
+      if (x.paye) return refus('Paie déjà versée cette semaine : la prime ne peut plus être ajoutée.');
+      if (!(m > 0)) return refus('Indique un montant.');
+      if (motif.value.trim().length < 5) return refus('Une prime doit être motivée par écrit (5 caractères minimum).');
+      if (type.value === 'hebdo') {
+        const dejaLui = semaine.filter(p => memeNom(p.nom, x.nom)).reduce((t, p) => t + p.montant, 0);
+        if (dejaLui + m > PRIME_HEBDO.parSalarie) return refus(`Art. 41-1 : 5 000 $ maximum par salarié et par semaine (déjà ${prix.format(dejaLui)}).`);
+        if (!beneficiaires.has(x.nom.toLowerCase()) && beneficiaires.size >= maxBeneficiaires) return refus(`Art. 41-1 : la prime ne peut aller qu'à 33 % des salariés, soit ${maxBeneficiaires} sur ${fiches.length}.`);
+        if (utiliseHebdo + m > hebdo.montant) return refus(`Art. 41-1 : enveloppe de la semaine dépassée (reste ${prix.format(Math.max(0, hebdo.montant - utiliseHebdo))} sur ${prix.format(hebdo.montant)}).`);
+      } else {
+        if (!mensuelleAutorisee) return refus('Art. 41-2 : un seul versement par mois ; la prime exceptionnelle a déjà été versée il y a moins de 4 semaines.');
+        if (!mens.montant) return refus('Art. 41-2 : pas de prime exceptionnelle, le bénéfice net des 4 dernières semaines est inférieur à 5 000 $.');
+        if (utiliseMens + m > mens.montant) return refus(`Art. 41-2 : enveloppe dépassée (reste ${prix.format(Math.max(0, mens.montant - utiliseMens))} sur ${prix.format(mens.montant)}).`);
+      }
+      primesApercu.unshift({ id: 'pr-' + Date.now().toString(36), type: type.value, ...(type.value === 'mensuelle' ? { bloc } : {}), nom: x.nom, semaine: per.debut, montant: m, motif: motif.value.trim(), par: identifiant, le: new Date() });
+      journal('Paie', type.value === 'hebdo' ? 'Prime hebdomadaire accordée' : 'Prime exceptionnelle accordée', `${x.nom} · ${prix.format(m)} · ${motif.value.trim()} · ${per.libelle}`);
       rendreEspace('espace-paie');
     });
     const lignes = primesApercu.filter(p => p.semaine >= per.debut && p.semaine < per.fin).map(p => {
+      const t = typePrime(p) === 'hebdo' ? 'Hebdo (41-1)' : 'Exceptionnelle (41-2)';
       const payee = fiches.some(x => memeNom(x.nom, p.nom) && x.paye);
-      if (payee) return [p.nom, prix.format(p.montant), p.motif, p.par, fmtDate(p.le), el('span', 'pastille pastille-validee', 'Versée')];
+      if (payee) return [p.nom, t, prix.format(p.montant), p.motif, p.par, fmtDate(p.le), el('span', 'pastille pastille-validee', 'Versée')];
       const arme = primeArmee === p;
       const k = el('button', 'btn btn-mini' + (arme ? ' btn-danger' : ' btn-ghost'), arme ? 'Confirmer' : 'Retirer');
       k.type = 'button';
@@ -1847,10 +1913,10 @@
         if (!arme) { primeArmee = p; } else { primesApercu.splice(primesApercu.indexOf(p), 1); primeArmee = null; journal('Paie', 'Prime retirée', `${p.nom} · ${prix.format(p.montant)} · ${p.motif}`); }
         rendreEspace('espace-paie');
       });
-      return [p.nom, prix.format(p.montant), p.motif, p.par, fmtDate(p.le), k];
+      return [p.nom, t, prix.format(p.montant), p.motif, p.par, fmtDate(p.le), k];
     });
-    const p = panneauAvec(`Primes · semaine ${per.libelle}`, tableau(['Employé', 'Montant', 'Motif', 'Accordée par', 'Le', ''], lignes, 'Aucune prime cette semaine.'));
-    p.append(f, aide, pied);
+    const p = panneauAvec(`Primes · semaine ${per.libelle}`, tableau(['Employé', 'Type', 'Montant', 'Motif', 'Accordée par', 'Le', ''], lignes, 'Aucune prime cette semaine.'));
+    p.append(info, f, el('p', 'calcul-detail panneau-pied', 'Code du travail et du commerce, art. 41. Les primes s’ajoutent au salaire (hors salaire max) et ne peuvent pas être versées en liquide.'), pied);
     return p;
   }
 
