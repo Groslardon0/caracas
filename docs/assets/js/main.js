@@ -346,7 +346,7 @@
       tuiles: ['Véhicules en stock', 'Valeur du stock', 'Réservés'],
       registres: [{
         titre: 'Parc', colonnes: () => ['Réf.', 'Véhicule', 'Type', 'Origine', ...(estResponsable() ? ["Prix d'achat"] : []), 'Prix de vente', ...(estResponsable() ? ['Marge'] : []), 'Statut', 'Arrivée', 'Catalogue', ...(estResponsable() ? ['Annonce', 'Supprimer'] : [])], vide: 'Aucun véhicule en stock pour le moment.',
-        lignes: () => vehicules.filter(v => !v.gamme).sort((a, b) => (b.arrivee || '').localeCompare(a.arrivee || '')).map(v => [
+        lignes: () => vehicules.filter(v => !v.gamme && (stockNeufs || v.type !== 'neuf') && correspondStock(v)).sort((a, b) => (b.arrivee || '').localeCompare(a.arrivee || '')).map(v => [
           v.id.toUpperCase(), nomV(v), TYPE[v.type], v.rachat ? 'Rachat' : v.stockInitial ? 'Ajout manuel' : 'Concession',
           ...(estResponsable() ? [v.prixAchat ? prix.format(v.prixAchat) : '—'] : []), prix.format(v.prix), ...(estResponsable() ? [v.prixAchat ? texteMarge(v.prix, v.prixAchat) : '—'] : []), STATUT[v.statut] || v.statut,
           v.arrivee ? new Date(v.arrivee + 'T12:00').toLocaleDateString('fr-FR') : '—',
@@ -354,9 +354,9 @@
           ...(estResponsable() ? [boutonModifier(v), boutonSuppression(v)] : []),
         ]),
       }, {
-        titre: 'Gamme neuve (une annonce par modèle au catalogue)', vide: 'Aucun véhicule dans la gamme neuve.',
+        titre: 'Gamme neuve (une annonce par modèle au catalogue)', vide: 'Aucun véhicule de la gamme ne correspond.', afficher: () => stockNeufs,
         colonnes: () => ['Réf.', 'Véhicule', 'Catégorie', 'Prix de vente', 'Coût concession (85 %)', 'Photo', 'Catalogue', ...(estResponsable() ? ['Annonce', 'Supprimer'] : [])],
-        lignes: () => vehicules.filter(v => v.gamme).sort((a, b) => a.prix - b.prix || nomV(a).localeCompare(nomV(b), 'fr')).map(v => [
+        lignes: () => vehicules.filter(v => v.gamme && correspondStock(v)).sort((a, b) => a.prix - b.prix || nomV(a).localeCompare(nomV(b), 'fr')).map(v => [
           v.id.toUpperCase(), nomV(v), CAT[v.categorie] || v.categorie, prix.format(v.prix), prix.format(Math.round(v.prix * PART_COUT_CONCESSION / 100)),
           v.image ? 'Oui' : '—', publication(v, 'espace-stock'), ...(estResponsable() ? [boutonModifier(v), boutonSuppression(v)] : []),
         ]),
@@ -2699,6 +2699,48 @@
     dlgAnnonce.showModal();
   }
 
+  /* Stock : recherche (modèle, marque, réf., plaque, catégorie) et affichage des neufs (stock illimité, masqués par défaut) */
+  let stockRecherche = '';
+  let stockNeufs = false;
+  const sansAccents = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  function correspondStock(v) {
+    const q = sansAccents(stockRecherche).trim();
+    if (!q) return true;
+    const texte = sansAccents([nomV(v), v.id, plaqueDe(v), CAT[v.categorie] || v.categorie, TYPE[v.type]].join(' '));
+    return q.split(/\s+/).every(m => texte.includes(m));
+  }
+  function barreStock() {
+    const d = el('div', 'filtres stock-filtres');
+    const ch = el('div', 'champ champ-large');
+    const l = el('label', null, 'Rechercher dans le stock');
+    l.htmlFor = 'st-recherche';
+    const i = el('input');
+    i.id = 'st-recherche';
+    i.type = 'search';
+    i.placeholder = 'Modèle, marque, réf. ou plaque';
+    i.autocomplete = 'off';
+    i.value = stockRecherche;
+    i.addEventListener('input', () => {
+      stockRecherche = i.value;
+      const pos = i.selectionStart;
+      rendreEspace('espace-stock');
+      const n = $('#st-recherche');
+      if (n) { n.focus(); n.setSelectionRange(pos, pos); }
+    });
+    ch.append(l, i);
+    const c = el('label', 'case');
+    const cb = el('input');
+    cb.type = 'checkbox';
+    cb.checked = stockNeufs;
+    cb.addEventListener('change', () => { stockNeufs = cb.checked; rendreEspace('espace-stock'); });
+    c.append(cb, ' Afficher les véhicules neufs (stock illimité)');
+    const nb = vehicules.filter(v => !v.gamme && (stockNeufs || v.type !== 'neuf') && correspondStock(v)).length
+      + (stockNeufs ? vehicules.filter(v => v.gamme && correspondStock(v)).length : 0);
+    const info = el('p', 'calcul-detail', `${nb} véhicule${nb > 1 ? 's' : ''} affiché${nb > 1 ? 's' : ''}${stockNeufs ? '' : ' (occasions)'}`);
+    d.append(ch, c, info);
+    return d;
+  }
+
   function plaqueDe(v) {
     return v.plaque || (rachatsApercu.find(r => r.ref === v.id) || {}).plaque || '';
   }
@@ -4718,11 +4760,13 @@ ${ordre.map(n => b.tables.find(x => x.titre === n)).filter(Boolean).map(table).j
     if (c.historique && !masque) blocs.push(...blocsHistorique());
     if (c.formulaire === 'depense' && !masque) blocs.push(formulaireDepense());
     if (c.stockManuel && estResponsable()) blocs.push(formulaireStock());
+    if (c.stockManuel) blocs.push(barreStock());
     if (c.plafonds && !masque) blocs.push(panneauPlafonds());
     if (masque) blocs.push(el('p', 'note-reserve', c.messageReserve || 'Le registre des rachats est réservé aux managers et à la direction. Envoie ton devis sur Discord pour validation.'));
 
     (contrat ? c.registresContrat : masque ? [] : c.registres || []).forEach(r => {
       if (r.reserveResp && !estResponsable()) return;
+      if (r.afficher && !r.afficher()) return;
       const panneau = el('div', 'panneau');
       const tete = el('div', 'panneau-tete');
       tete.append(el('h2', 'panneau-titre', r.titre));
