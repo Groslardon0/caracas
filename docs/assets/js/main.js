@@ -526,8 +526,14 @@
     const k = lundi(x.debut).getTime();
     const avant = pointagesApercu.filter(y => y !== x && memeNom(y.nom, x.nom) && y.debut < x.debut && lundi(y.debut).getTime() === k)
       .reduce((t, y) => t + dureeMs(y), 0);
-    return Math.max(0, Math.min(dureeMs(x), SUBVENTION_HEURES * 3600000 - avant));
+    return heuresPayables(avant + dureeMs(x)) - heuresPayables(avant);
   };
+  /* Heures payées pour un cumul hebdomadaire : CTC 42-3, toute heure entamée au-delà de 30 min compte
+     comme une heure complète (30 min ou moins : non comptée) ; CTC 42-2, 15 h par semaine au plus */
+  function heuresPayables(t) {
+    const h = Math.floor(t / 3600000);
+    return Math.min(SUBVENTION_HEURES, t - h * 3600000 > 1800000 ? h + 1 : h) * 3600000;
+  }
   const gain = x => Math.round(msPaye(x) / 3600000 * tauxDe(x.poste));
   const fmtChrono = ms => {
     const t = Math.max(0, Math.floor(ms / 1000));
@@ -3741,7 +3747,7 @@
     const paye = heuresPayees(f.nom, per);
     const lignes = [
       ['Heures badgées', fmtDuree(f.ms)],
-      [`Heures rémunérées (${SUBVENTION_HEURES} h max par semaine)`, fmtDuree(paye)],
+      [`Heures rémunérées (arrondies à l’heure, CTC 42-3 ; ${SUBVENTION_HEURES} h max)`, fmtDuree(paye)],
       ['Taux horaire du grade', `${prix.format(tauxDe(f.poste))} / h`],
       [f.fixe ? 'Salaire fixe (comptable)' : 'Salaire horaire', prix.format(f.fixe || f.salaireHoraire)],
       [`Commissions (${commissionDe(f.poste)} % du bénéfice des ventes validées)`, prix.format(f.commission)],
