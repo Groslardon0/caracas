@@ -302,7 +302,7 @@
       onglets: [{ id: 'vehicule', nom: 'Vente véhicule' }, { id: 'contrat', nom: 'Vente de contrat' }],
       registresContrat: [{
         titre: 'Registre des contrats', vide: 'Aucun contrat vendu.',
-        colonnes: () => ['Date', 'Client', 'Véhicule', 'Vendeur', 'Prix', 'Statut', ...(estResponsable() ? ['Validation'] : [])],
+        colonnes: () => ['Date', 'Client', 'Véhicule', 'Vendeur', 'Prix', 'Statut', ...(estResponsable() ? ['Validation'] : []), ...(estPatron() ? [''] : [])],
         note: () => {
           const n = contratsApercu.filter(v => v.statut === 'attente').length;
           return estResponsable() && n ? `${n} contrat${n > 1 ? 's' : ''} à valider` : '';
@@ -310,12 +310,13 @@
         lignes: () => contratsApercu.map(v => {
           const cells = [fmtDate(v.date), v.client, v.vehicule, v.vendeur || '—', prix.format(v.prix), celluleStatut(v)];
           if (estResponsable()) cells.push(actionsVente(v));
+          if (estPatron()) cells.push(boutonSupprLigne(v, `le contrat ${v.vehicule} · ${v.client}`, () => supprimerContrat(v)));
           return cells;
         }),
       }],
       registres: [{
         titre: 'Registre des ventes', vide: 'Aucune vente enregistrée.',
-        colonnes: () => ['Date', 'Client', 'Véhicule', 'Type', 'Plaque', 'Vendeur', 'Prix', ...(estResponsable() ? ['Bénéfice'] : []), 'Statut', ...(estResponsable() ? ['Validation'] : [])],
+        colonnes: () => ['Date', 'Client', 'Véhicule', 'Type', 'Plaque', 'Vendeur', 'Prix', ...(estResponsable() ? ['Bénéfice'] : []), 'Statut', ...(estResponsable() ? ['Validation'] : []), ...(estPatron() ? [''] : [])],
         note: () => {
           const n = ventesApercu.filter(v => v.statut === 'attente').length;
           return estResponsable() && n ? `${n} vente${n > 1 ? 's' : ''} à valider` : '';
@@ -323,6 +324,7 @@
         lignes: () => ventesApercu.map(v => {
           const cells = [fmtDate(v.date), v.client, v.vehicule, { neuf: 'Neuf', occasion: 'Occasion' }[v.categorie] || '—', v.plaque, v.vendeur || '—', prix.format(v.prix), ...(estResponsable() ? [prix.format(v.benefice || 0)] : []), celluleStatut(v)];
           if (estResponsable()) cells.push(actionsVente(v));
+          if (estPatron()) cells.push(boutonSupprLigne(v, `la vente ${v.vehicule} · ${v.client}`, () => supprimerVente(v)));
           return cells;
         }),
       }],
@@ -334,8 +336,8 @@
       reserve: true,
       tuiles: ['Rachats du mois', 'Montant racheté du mois'],
       registres: [{
-        titre: 'Registre des rachats', colonnes: ['Photo', 'Date', 'Client', 'Modèle', 'Plaque', 'Prix de rachat', 'Prix de revente', 'Marge', 'Réf. stock', 'Enregistré par', 'Catalogue'], vide: 'Aucun rachat enregistré.',
-        lignes: () => rachatsApercu.map(r => [vignette(r), fmtDate(r.date), r.client, r.modele, r.plaque, prix.format(r.prix), prix.format(r.revente), texteMarge(r.revente, r.prix), r.ref.toUpperCase(), r.par, publication(vehicules.find(x => x.id === r.ref), 'espace-rachats')]),
+        titre: 'Registre des rachats', colonnes: () => ['Photo', 'Date', 'Client', 'Modèle', 'Plaque', 'Prix de rachat', 'Prix de revente', 'Marge', 'Réf. stock', 'Enregistré par', 'Catalogue', ...(estPatron() ? [''] : [])], vide: 'Aucun rachat enregistré.',
+        lignes: () => rachatsApercu.map(r => [vignette(r), fmtDate(r.date), r.client, r.modele, r.plaque, prix.format(r.prix), prix.format(r.revente), texteMarge(r.revente, r.prix), r.ref.toUpperCase(), r.par, publication(vehicules.find(x => x.id === r.ref), 'espace-rachats'), ...(estPatron() ? [boutonSupprLigne(r, `le rachat ${r.modele} · ${r.plaque}`, () => supprimerRachat(r))] : [])]),
       }],
     },
     'espace-stock': {
@@ -600,6 +602,58 @@
     return d;
   }
   const CAT_ACHAT_NEUF = 'Achat véhicule neuf (coût garage)';
+  /* Suppression d'une ligne de registre (erreur de saisie) : 2 clics ; ce qui en découle est défait */
+  let ligneArmee = null;
+  function boutonSupprLigne(o, libelle, action) {
+    const arme = ligneArmee === o;
+    const b = el('button', 'btn btn-mini ' + (arme ? 'btn-danger' : 'btn-ghost'), arme ? 'Confirmer' : 'Supprimer');
+    b.type = 'button';
+    b.setAttribute('aria-label', `Supprimer ${libelle}`);
+    b.title = arme ? 'Cliquer à nouveau pour supprimer définitivement' : 'Supprimer (erreur de saisie)';
+    b.addEventListener('click', () => {
+      if (!arme) { ligneArmee = o; rendreEspace(pageEspace()); return; }
+      ligneArmee = null;
+      action();
+      rendreEspace(pageEspace());
+    });
+    return b;
+  }
+  function retirerDe(t, o) { const k = t.indexOf(o); if (k >= 0) t.splice(k, 1); }
+  function supprimerVente(v) {
+    retirerDe(ventesApercu, v);
+    const faits = [];
+    if (v.categorie === 'neuf' && v.depenseAuto) {
+      const d = depensesApercu.find(x => x.lien === 'neuf' && x.montant === v.cout && x.libelle === `${v.vehicule} · ${v.plaque} · ${v.client}`);
+      if (d) { retirerDe(depensesApercu, d); faits.push("dépense d'achat retirée"); }
+    }
+    if (v.vehiculeRetire && v.vehiculeRetire.copie && !vehicules.some(x => x.id === v.vehiculeRetire.id)) {
+      vehicules.push(v.vehiculeRetire.copie);
+      faits.push(`${v.vehiculeRetire.id.toUpperCase()} remis en stock`);
+      remplirCategories();
+      rendreAccueil();
+      rendreCatalogue();
+    }
+    journal('Ventes', 'Vente supprimée', `${v.vehicule} · ${v.client} · ${prix.format(v.prix)} · ${v.vendeur || '—'}${faits.length ? ' · ' + faits.join(' · ') : ''}`);
+  }
+  function supprimerContrat(v) {
+    retirerDe(contratsApercu, v);
+    journal('Ventes', 'Contrat supprimé', `${v.vehicule} · ${v.client} · ${prix.format(v.prix)} · ${v.vendeur || '—'}`);
+  }
+  function supprimerRachat(r) {
+    retirerDe(rachatsApercu, r);
+    const faits = [];
+    const d = depensesApercu.find(x => x.lien === r.ref && x.categorie === CAT_RACHAT);
+    if (d) { retirerDe(depensesApercu, d); faits.push('dépense du rachat retirée'); }
+    const st = vehicules.find(x => x.id === r.ref);
+    if (st && st.statut !== 'vendu') {
+      retirerDe(vehicules, st);
+      faits.push(`${r.ref.toUpperCase()} retiré du stock et du catalogue`);
+      remplirCategories();
+      rendreAccueil();
+      rendreCatalogue();
+    }
+    journal('Rachats', 'Rachat supprimé', `${r.modele} · ${r.plaque} · ${r.client} · ${prix.format(r.prix)}${faits.length ? ' · ' + faits.join(' · ') : ''}`);
+  }
   function decider(v, statut) {
     v.statut = statut;
     v.decisionLe = new Date();
@@ -615,7 +669,7 @@
         || vehicules.find(x => x.type === 'occasion' && x.statut !== 'vendu' && nomV(x).toLowerCase() === (v.vehicule || '').trim().toLowerCase());
       if (st) {
         vehicules.splice(vehicules.indexOf(st), 1);
-        v.vehiculeRetire = { id: st.id, modele: nomV(st) };
+        v.vehiculeRetire = { id: st.id, modele: nomV(st), copie: JSON.parse(JSON.stringify(st)) };
         journal('Stock', 'Véhicule vendu retiré du stock et du catalogue', `${st.id.toUpperCase()} · ${nomV(st)} · ${v.client}`);
         remplirCategories();
         rendreAccueil();
