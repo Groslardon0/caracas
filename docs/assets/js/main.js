@@ -1489,6 +1489,11 @@
     }).filter(f => f.poste !== 'admin').sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
   }
 
+  /* En ligne, l'activité commence le lundi 02/11/2026 : aucune semaine antérieure n'est affichée (paie, impôts, compta, historique).
+     En aperçu (données fictives), toutes les semaines restent visibles. */
+  const DEBUT_ACTIVITE = new Date(2026, 10, 2);
+  const semaineAffichee = per => !(window.CARACAS_CONFIG && window.CARACAS_CONFIG.supabaseUrl) || per.debut >= DEBUT_ACTIVITE;
+
   function periodeSemaine(decalage) {
     const debut = lundi(new Date());
     debut.setDate(debut.getDate() + 7 * decalage);
@@ -1620,9 +1625,10 @@
     }
 
     /* Semaines précédentes : un bloc par semaine, 4 dernières semaines */
-    blocs.push(el('p', 'calcul-detail paie-periode', 'Les 4 dernières semaines terminées, de la plus récente à la plus ancienne.'));
+    blocs.push(el('p', 'calcul-detail paie-periode', semaineAffichee(periodeSemaine(-1)) ? 'Les 4 dernières semaines terminées, de la plus récente à la plus ancienne.' : 'Aucune semaine terminée pour le moment.'));
     for (let n = 1; n <= 4; n += 1) {
       const per = periodeSemaine(-n);
+      if (!semaineAffichee(per)) break;
       const fiches = calculerPaie(per);
       if (!direction) {
         const f = fiches.find(x => memeNom(x.nom, identifiant)) || vide();
@@ -1873,7 +1879,7 @@
   }
   let impotArme = null;
   function panneauImpots() {
-    const lignes = [0, -1, -2, -3, -4].map(d => impotSemaine(periodeSemaine(d))).map(m => {
+    const lignes = [0, -1, -2, -3, -4].map(periodeSemaine).filter(semaineAffichee).map(impotSemaine).map(m => {
       const etat = el('div', 'actions-ligne');
       if (m.paiement) {
         const p = el('span', 'pastille pastille-validee', m.paiement.horsSite ? 'Réglé hors du site' : `Payé le ${jour(m.paiement.date)}`);
@@ -3390,7 +3396,7 @@
     if (!demo) journal('Comptabilité', "Subvention de l'État reçue", `${per.libelle} · ${prix.format(s.total)}`);
   }
   function panneauSubventions() {
-    const lignes = [0, -1, -2, -3, -4].map(d => {
+    const lignes = [0, -1, -2, -3, -4].filter(d => semaineAffichee(periodeSemaine(d))).map(d => {
       const per = periodeSemaine(d);
       const s = subventionSemaine(per);
       let etat;
@@ -3412,7 +3418,8 @@
 
   function blocsCompta() {
     const blocs = [];
-    blocs.push(boutonsSegment('Période', [['semaine', 'Semaine en cours'], ['precedente', 'Semaine précédente'], ['mois', 'Mois en cours'], ['tout', 'Tout']], periodeCompta,
+    if (periodeCompta === 'precedente' && !semaineAffichee(periodeSemaine(-1))) periodeCompta = 'semaine';
+    blocs.push(boutonsSegment('Période', [['semaine', 'Semaine en cours'], ...(semaineAffichee(periodeSemaine(-1)) ? [['precedente', 'Semaine précédente']] : []), ['mois', 'Mois en cours'], ['tout', 'Tout']], periodeCompta,
       id => { periodeCompta = id; ecritureASupprimer = null; rendreEspace('espace-compta'); }, 'periode-onglets'));
     const per = periodeCompte();
     const tout = grandLivre();
@@ -3449,7 +3456,7 @@
     blocs.push(panneauAvec('Répartition par catégorie', tableau(['Catégorie', 'Sens', 'Montant', 'Part'], rep, 'Aucun mouvement sur la période.')));
 
     /* Bilan des 5 dernières semaines */
-    const semaines = [0, -1, -2, -3, -4].map(d => {
+    const semaines = [0, -1, -2, -3, -4].filter(d => semaineAffichee(periodeSemaine(d))).map(d => {
       const p = periodeSemaine(d);
       const s = totaux(tout.filter(x => x.date >= p.debut && x.date < p.fin));
       const fin = tout.filter(x => x.date < p.fin);
@@ -3541,21 +3548,21 @@
     const nVentes = ventesApercu.filter(v => v.statut === 'attente').length;
     const nContrats = contratsApercu.filter(v => v.statut === 'attente').length;
     const nonPublies = vehicules.filter(v => v.rachat && !enLigne(v) && v.statut !== 'vendu').length;
-    const precedente = calculerPaie(periodeSemaine(-1)).filter(f => !f.paye && f.total > 0);
+    const precedente = semaineAffichee(periodeSemaine(-1)) ? calculerPaie(periodeSemaine(-1)).filter(f => !f.paye && f.total > 0) : [];
     if (nVentes) aFaire.push([`${nVentes} vente(s) à valider`, lienEspace('Ouvrir les ventes', 'espace-ventes', () => { sousVentes = 'vehicule'; })]);
     if (nContrats) aFaire.push([`${nContrats} contrat(s) à valider`, lienEspace('Ouvrir les contrats', 'espace-ventes', () => { sousVentes = 'contrat'; })]);
     if (nonPublies) aFaire.push([`${nonPublies} véhicule(s) racheté(s) pas encore publié(s) au catalogue`, lienEspace('Ouvrir le stock', 'espace-stock')]);
     if (precedente.length) aFaire.push([`${precedente.length} paie(s) de la semaine dernière à régler : ${prix.format(precedente.reduce((s, f) => s + f.total, 0))}`,
       lienEspace('Ouvrir la paie', 'espace-paie', () => { ongletPaie = 'employes'; periodePaie = 'precedentes'; employePaie = null; })]);
     const semPrec = periodeSemaine(-1);
-    if (!clotureDe(semPrec.cle) && [...ventesApercu, ...depensesApercu, ...rachatsApercu].some(x => x.date >= semPrec.debut && x.date < semPrec.fin)) {
+    if (semaineAffichee(semPrec) && !clotureDe(semPrec.cle) && [...ventesApercu, ...depensesApercu, ...rachatsApercu].some(x => x.date >= semPrec.debut && x.date < semPrec.fin)) {
       aFaire.push([`Semaine précédente (${semPrec.libelle}) pas encore clôturée`, el('span', 'calcul-detail', 'Voir « Clôture de la semaine »')]);
     }
     equipeVisible().map(etatRH).filter(x => x.alerte).forEach(x => aFaire.push([x.alerte, lienEspace('Ouvrir l’équipe', 'espace-equipe')]));
     const nResa = reservationsApercu.filter(x => x.statut === 'nouvelle').length;
     if (nResa) aFaire.push([`${nResa} demande(s) de réservation à traiter`, el('span', 'calcul-detail', 'Voir « Demandes de réservation »')]);
     const impPrec = impotSemaine(periodeSemaine(-1));
-    if (!impPrec.paiement && impPrec.total > 0) {
+    if (semaineAffichee(impPrec.per) && !impPrec.paiement && impPrec.total > 0) {
       aFaire.push([impPrec.majo
         ? `Impôts de la semaine ${impPrec.per.libelle} EN RETARD : ${prix.format(impPrec.total)} (majoration ${impPrec.majo} %)`
         : `Impôts de la semaine ${impPrec.per.libelle} : ${prix.format(impPrec.total)} à payer avant le ${fmtDate(impPrec.echeance)}`,
@@ -4376,6 +4383,7 @@ ${f.ventes.length ? `<table><thead><tr><th>Date</th><th>Type</th><th>Vente</th><
     const liste = [];
     for (let d = 0; liste.length < 260; d -= 1) {
       const p = periodeSemaine(d);
+      if (d < 0 && !semaineAffichee(p)) break;
       liste.push(p);
       if (p.debut <= premier) break;
     }
@@ -4385,7 +4393,7 @@ ${f.ventes.length ? `<table><thead><tr><th>Date</th><th>Type</th><th>Vente</th><
   /* Clôture depuis le tableau de bord (direction) */
   let clotureArmee = null;
   function panneauCloture() {
-    const lignes = [0, -1].map(d => periodeSemaine(d)).filter((p, i) => i === 0 || !clotureDe(p.cle)).map((p, i) => {
+    const lignes = [0, -1].map(d => periodeSemaine(d)).filter((p, i) => i === 0 || (semaineAffichee(p) && !clotureDe(p.cle))).map((p, i) => {
       const c = clotureDe(p.cle);
       const etat = c ? el('span', 'pastille pastille-validee', `Clôturée le ${fmtDate(c.le)} par ${c.par}`) : el('span', 'pastille pastille-attente', 'Non clôturée');
       const arme = clotureArmee === p.cle;
