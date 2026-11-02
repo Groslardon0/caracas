@@ -4870,7 +4870,7 @@ ${ordre.map(n => b.tables.find(x => x.titre === n)).filter(Boolean).map(table).j
       afficherCatalogue(page);
     } else {
       pageCourante = page;
-      montrerVue(page === 'accueil' ? 'accueil' : 'soon');
+      montrerVue(page === 'accueil' || page === 'contact' ? page : 'soon');
       $('#soon-label').textContent = PAGES[page];
       marquerNav(page);
     }
