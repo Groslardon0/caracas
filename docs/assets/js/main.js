@@ -270,7 +270,7 @@
     if (!dlg.open) dlg.showModal();
   }
   dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
-  $('.dlg-fermer').addEventListener('click', () => dlg.close());
+  dlg.querySelector('.dlg-fermer').addEventListener('click', () => dlg.close());
   dlg.addEventListener('close', () => {
     if (vehicules.some(v => v.id === location.hash.slice(1))) history.replaceState(null, '', '#' + retour);
   });
