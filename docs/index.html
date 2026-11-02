@@ -8,8 +8,9 @@
 <meta name="description" content="Le Caracas : véhicules neufs, occasions contrôlées et rachat de votre véhicule.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ultra&family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=Overpass+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ultra&family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=Overpass+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/espace-employe.css">
 </head>
 <body>
 
@@ -183,6 +184,10 @@
   <section data-view="espace" hidden>
     <div class="espace">
       <aside class="espace-nav">
+        <a class="espace-logo" href="#accueil" title="Voir le site public">
+          <svg viewBox="0 0 34 34" aria-hidden="true"><rect x="1" y="1" width="32" height="32" rx="3" class="logo-cadre"/><circle cx="17" cy="19" r="8" class="logo-soleil"/><path d="M1 33 V25 H8 L10 22 H19 L21 25 H33 V33 Z" class="logo-mesa"/></svg>
+          <span>CARACAS<small>Espace employé · voir le site</small></span>
+        </a>
         <div class="espace-qui">
           <p class="pied-titre">Connecté</p>
           <p id="esp-qui">Aperçu · Employé</p>
@@ -218,6 +223,7 @@
       <div class="espace-contenu">
         <div class="bandeau-ligne">
           <p class="bandeau-apercu" id="bandeau-apercu">Aperçu de l'espace employé : connexion et données pas encore branchées.</p>
+          <button class="btn btn-sm btn-ghost theme-bascule" type="button" id="theme-bascule">☀ Thème clair</button>
           <button class="btn btn-sm btn-ghost" type="button" id="demo-charger">Charger des données fictives</button>
           <button class="btn btn-sm btn-ghost" type="button" id="demo-effacer" hidden>Effacer les données fictives</button>
         </div>

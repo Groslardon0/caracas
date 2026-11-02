@@ -4812,7 +4812,21 @@ ${ordre.map(n => b.tables.find(x => x.titre === n)).filter(Boolean).map(table).j
   /* Navigation par #page ou #id-vehicule */
   function montrerVue(vue) {
     document.querySelectorAll('[data-view]').forEach(v => { v.hidden = v.dataset.view !== vue; });
+    document.body.classList.toggle('mode-employe', vue === 'espace');
   }
+  /* Thème de l'espace employé : sombre par défaut, clair au choix (mémorisé sur l'appareil) */
+  const appliquerTheme = t => {
+    document.body.dataset.theme = t;
+    $('#theme-bascule').textContent = t === 'clair' ? '☾ Thème sombre' : '☀ Thème clair';
+  };
+  let themeEmploye = 'sombre';
+  try { themeEmploye = localStorage.getItem('caracas-theme') || 'sombre'; } catch (e) { /* stockage indisponible */ }
+  appliquerTheme(themeEmploye);
+  $('#theme-bascule').addEventListener('click', () => {
+    themeEmploye = themeEmploye === 'clair' ? 'sombre' : 'clair';
+    try { localStorage.setItem('caracas-theme', themeEmploye); } catch (e) { /* ignoré */ }
+    appliquerTheme(themeEmploye);
+  });
   function marquerNav(page) {
     nav.querySelectorAll('a:not(.btn)').forEach(a => {
       const cible = a.getAttribute('href').slice(1);
