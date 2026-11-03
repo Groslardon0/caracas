@@ -10,6 +10,7 @@
   const TYPE = { neuf: 'Neuf', occasion: 'Occasion' };
   const STATUT = { disponible: 'Disponible', reserve: 'Réservé', vendu: 'Vendu' };
   const ETAT = { neuf: 'Neuf', excellent: 'Excellent', bon: 'Bon', correct: 'Correct' };
+  const PERF = { full: 'Full perf', perf: 'Perf', noperf: 'No-perf' };
   const CAT = { super: 'Supercar', sportive: 'Sportive', coupe: 'Coupé', berline: 'Berline', suv: 'SUV', moto: 'Moto', utilitaire: 'Utilitaire', bateau: 'Bateau', autre: 'Autre' };
   const prix = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 });
   const nombre = new Intl.NumberFormat('fr-FR');
@@ -25,7 +26,7 @@
   const cat = v => CAT[v.categorie] || v.categorie;
   const enLigne = v => v.publie !== false;
   const nomV = v => [v.marque, v.modele].filter(Boolean).join(' ');
-  const specsV = v => [v.annee && String(v.annee), v.kilometrage != null && v.kilometrage !== '' && km(v), v.places && v.places + ' places'].filter(Boolean);
+  const specsV = v => [PERF[v.perf], v.annee && String(v.annee), v.kilometrage != null && v.kilometrage !== '' && km(v), v.places && v.places + ' places'].filter(Boolean);
 
   let vehicules = [];
   let typeCourant = 'neuf';
@@ -261,7 +262,7 @@
     $('#dlg-titre').textContent = v.modele;
     $('#dlg-desc').textContent = v.description || '';
     remplirSpecs($('#dlg-specs'), [
-      ['Type', TYPE[v.type]], ['Année', v.annee || '—'], ['Kilométrage', v.kilometrage != null && v.kilometrage !== '' ? km(v) : '—'],
+      ['Type', TYPE[v.type]], ['Performance', PERF[v.perf] || '—'], ['Année', v.annee || '—'], ['Kilométrage', v.kilometrage != null && v.kilometrage !== '' ? km(v) : '—'],
       ['État', ETAT[v.etat] || v.etat || '—'], ['Places', v.places || '—'], ['Statut', STATUT[v.statut] || v.statut],
     ].filter(([, val]) => val !== '—'));
     $('#dlg-prix').textContent = prix.format(v.prix);
@@ -347,7 +348,7 @@
       registres: [{
         titre: 'Parc', colonnes: () => ['Réf.', 'Véhicule', 'Type', 'Origine', ...(estResponsable() ? ["Prix d'achat"] : []), 'Prix de vente', ...(estResponsable() ? ['Marge'] : []), 'Statut', 'Arrivée', 'Catalogue', ...(estResponsable() ? ['Annonce', 'Supprimer'] : [])], vide: 'Aucun véhicule en stock pour le moment.',
         lignes: () => vehicules.filter(v => !v.gamme && (stockNeufs || v.type !== 'neuf') && correspondStock(v)).sort((a, b) => (b.arrivee || '').localeCompare(a.arrivee || '')).map(v => [
-          v.id.toUpperCase(), nomV(v), TYPE[v.type], v.rachat ? 'Rachat' : v.stockInitial ? 'Ajout manuel' : 'Concession',
+          v.id.toUpperCase(), nomV(v) + (PERF[v.perf] ? ' · ' + PERF[v.perf] : ''), TYPE[v.type], v.rachat ? 'Rachat' : v.stockInitial ? 'Ajout manuel' : 'Concession',
           ...(estResponsable() ? [v.prixAchat ? prix.format(v.prixAchat) : '—'] : []), prix.format(v.prix), ...(estResponsable() ? [v.prixAchat ? texteMarge(v.prix, v.prixAchat) : '—'] : []), STATUT[v.statut] || v.statut,
           v.arrivee ? new Date(v.arrivee + 'T12:00').toLocaleDateString('fr-FR') : '—',
           publication(v, 'espace-stock'),
@@ -2635,6 +2636,7 @@
         <div class="champ"><label for="an-modele">Modèle</label><input id="an-modele" autocomplete="off"></div>
         <div class="champ"><label for="an-type">Type</label><select id="an-type">${opts(TYPE, v.type)}</select></div>
         <div class="champ"><label for="an-cat">Catégorie</label><select id="an-cat">${opts(CAT, v.categorie)}</select></div>
+        <div class="champ"><label for="an-perf">Performance</label><select id="an-perf"><option value="">—</option>${opts(PERF, v.perf)}</select></div>
         <div class="champ"><label for="an-prix">Prix de vente ($)</label><input id="an-prix" type="number" min="0" step="100" inputmode="numeric"></div>
         <div class="champ"><label for="an-statut">Statut</label><select id="an-statut">${opts(STATUT, v.statut)}</select></div>
         <div class="champ"><label for="an-annee">Année</label><input id="an-annee" type="number" min="1900" max="2100" inputmode="numeric"></div>
@@ -2691,7 +2693,7 @@
         marque: q('#an-marque').value.trim(), modele: q('#an-modele').value.trim(), type: q('#an-type').value, categorie: q('#an-cat').value,
         prix: prixV, statut: q('#an-statut').value, annee: num('#an-annee'), kilometrage: num('#an-km'), etat: q('#an-etat').value,
         places: num('#an-places'), plaque: q('#an-plaque').value.trim() || undefined, en_avant: q('#an-avant').checked,
-        description: q('#an-desc').value.trim(), image,
+        description: q('#an-desc').value.trim(), image, perf: q('#an-perf').value || undefined,
       });
       const r = rachatsApercu.find(x => x.ref === v.id);
       if (r) { r.revente = v.prix; if (fichier || !image) r.photo = image || null; }
@@ -2770,6 +2772,8 @@
     g.append(liste);
     const type = champ('st-type', 'Type', el('select'));
     type.innerHTML = '<option value="occasion">Occasion</option><option value="neuf">Neuf</option>';
+    const perf = champ('st-perf', 'Performance', el('select'));
+    perf.innerHTML = '<option value="">Choisir…</option>' + Object.entries(PERF).map(([k, t]) => `<option value="${k}">${t}</option>`).join('');
     const vente = champ('st-prix', 'Prix de vente ($)', el('input'));
     const achat = champ('st-achat', "Prix d'achat ($, facultatif)", el('input'));
     [vente, achat].forEach(i => { i.type = 'number'; i.min = '0'; i.step = '100'; i.inputMode = 'numeric'; });
@@ -2801,9 +2805,10 @@
       ev.preventDefault();
       msg.className = 'form-message erreur';
       if (modele.value.trim().length < 2 || !(Number(vente.value) > 0)) { msg.textContent = 'Indique au moins le modèle et le prix de vente.'; return; }
+      if (!perf.value) { msg.textContent = 'Choisis la performance : Full perf, Perf ou No-perf.'; perf.focus(); return; }
       const ref = (prixNeufsCache || []).find(x => x.n.toLowerCase() === modele.value.trim().toLowerCase());
       const v = {
-        id: prochaineRef(), type: type.value, marque: '', modele: modele.value.trim(),
+        id: prochaineRef(), type: type.value, marque: '', modele: modele.value.trim(), perf: perf.value,
         categorie: ref ? CAT_CATALOGUE[ref.c] || 'autre' : 'autre',
         prix: Math.round(Number(vente.value)), prixAchat: Number(achat.value) > 0 ? Math.round(Number(achat.value)) : undefined,
         plaque: plaque.value.trim() || undefined, etat: '', image: '',
@@ -2811,7 +2816,7 @@
         statut: 'disponible', en_avant: false, stockInitial: true, publie: coche.checked, arrivee: dateArrivee(new Date()),
       };
       vehicules.push(v);
-      journal('Stock', 'Véhicule ajouté manuellement', `${v.id.toUpperCase()} · ${v.modele} · ${TYPE[v.type]} · ${prix.format(v.prix)}`);
+      journal('Stock', 'Véhicule ajouté manuellement', `${v.id.toUpperCase()} · ${v.modele} · ${TYPE[v.type]} · ${PERF[v.perf]} · ${prix.format(v.prix)}`);
       remplirCategories();
       rendreAccueil();
       rendreCatalogue();
@@ -2827,7 +2832,7 @@
     const aujourdhui = r.date || new Date();
     const v = {
       id: 'cc-' + String(max + 1).padStart(3, '0'),
-      type: 'occasion', marque: '', modele: r.modele,
+      type: 'occasion', marque: '', modele: r.modele, perf: r.perf || undefined,
       categorie: ref ? CAT_CATALOGUE[ref.c] || 'autre' : 'autre',
       prix: r.prix, prixAchat: r.prixAchat, plaque: r.plaque || undefined, etat: '', image: r.photo || '',
       description: r.options && r.options.length ? 'Véhicule repris par le Caracas. Customisation : ' + r.options.join(', ') + '.' : 'Véhicule repris par le Caracas.',
@@ -2928,6 +2933,7 @@
       verifier(montant, Number(montant.value) > 0, 'le prix de rachat');
       verifier(plaque, /^[A-Z0-9 ]{2,8}$/.test(plaque.value.trim()), 'la plaque (2 à 8 lettres ou chiffres)');
       verifier(revente, Number(revente.value) > 0, 'le prix de revente');
+      verifier(f.querySelector('#ra-perf'), !!f.querySelector('#ra-perf').value, 'la performance');
       if (manque.length) {
         msg.className = 'form-message erreur';
         msg.textContent = 'À compléter : ' + manque.join(', ') + '.';
@@ -2944,7 +2950,7 @@
         }
       }
       const nomModele = modele.value.trim();
-      const v = mettreEnStock({ modele: nomModele, prixAchat: Number(montant.value), prix: Number(revente.value), plaque: plaque.value.trim(), photo: photoUrl, options: optionsCalc });
+      const v = mettreEnStock({ modele: nomModele, prixAchat: Number(montant.value), prix: Number(revente.value), plaque: plaque.value.trim(), photo: photoUrl, options: optionsCalc, perf: f.querySelector('#ra-perf').value });
       rachatsApercu.unshift({ date: new Date(), client: client.value.trim(), modele: nomModele, prix: Number(montant.value), revente: v.prix, ref: v.id, plaque: plaque.value.trim(), par: identifiant, photo: photoUrl });
       depensesApercu.unshift({
         n: depensesApercu.length, date: new Date(), categorie: CAT_RACHAT,

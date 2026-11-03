@@ -314,6 +314,15 @@
         <input id="ra-plaque" class="plaque-input" type="text" maxlength="8" autocomplete="off" placeholder="ex. 46EEK572">
       </div>
       <div class="champ">
+        <label for="ra-perf">Performance</label>
+        <select id="ra-perf">
+          <option value="">Choisir…</option>
+          <option value="full">Full perf</option>
+          <option value="perf">Perf</option>
+          <option value="noperf">No-perf</option>
+        </select>
+      </div>
+      <div class="champ">
         <label for="ra-revente">Prix de revente catalogue ($)</label>
         <input id="ra-revente" type="number" min="0" step="100" inputmode="numeric">
         <p class="calcul-detail ra-marge" id="ra-marge"></p>
