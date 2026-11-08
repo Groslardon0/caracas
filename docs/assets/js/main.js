@@ -1553,6 +1553,7 @@
     s.title = `Payé ${prix.format(f.paye.montant)} par ${f.paye.par} le ${fmtDate(f.paye.le)}`;
     return s;
   };
+  let paieAnnulArmee = null;
   function ligneEmploye(f, per) {
     const nom = el('button', 'lien-nom', f.nom);
     nom.type = 'button';
@@ -1574,6 +1575,26 @@
         });
         rendreEspace('espace-paie');
       });
+    } else if (f.paye) {
+      /* Remettre en non payé (2 clics) : retire le paiement et sa dépense « Salaires » */
+      const cleAnnul = per.cle + '|' + f.nom;
+      const arme = paieAnnulArmee === cleAnnul;
+      const annuler = el('button', 'btn btn-mini ' + (arme ? 'btn-danger' : 'btn-ghost'), arme ? 'Confirmer' : 'Remettre en non payé');
+      annuler.type = 'button';
+      annuler.setAttribute('aria-label', `Remettre la paie de ${f.nom} (${per.libelle}) en non payée`);
+      annuler.addEventListener('click', () => {
+        if (!arme) { paieAnnulArmee = cleAnnul; rendreEspace('espace-paie'); return; }
+        paieAnnulArmee = null;
+        const i = paiesApercu.indexOf(f.paye);
+        if (i >= 0) paiesApercu.splice(i, 1);
+        const libelle = `Paie ${f.nom} · ${per.libelle}`;
+        const d = depensesApercu.findIndex(x => x.lien === 'paie' && x.libelle === libelle);
+        if (d >= 0) depensesApercu.splice(d, 1);
+        journal('Paie', 'Paie remise en non payée', `${f.nom} · ${per.libelle} · ${prix.format(f.paye.montant)}${d >= 0 ? ' · dépense Salaires retirée' : ''}`);
+        rendreEspace('espace-paie');
+      });
+      action = el('div', 'actions-ligne');
+      action.append(etatPaiement(f), annuler);
     }
     return [nom, (POSTES.find(x => x.id === f.poste) || {}).nom || f.poste, fmtDuree(f.ms), f.modeFixe ? `${prix.format(f.fixe)} (fixe${f.fixeLimite ? `, limité au bénéfice sur ${prix.format(f.fixePrevu)}` : ''})` : prix.format(f.salaireHoraire),
       String(f.ventes.length) + (f.attente ? ` (+${f.attente} en attente)` : ''), prix.format(f.benefice),
