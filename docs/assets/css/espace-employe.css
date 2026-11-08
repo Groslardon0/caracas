@@ -188,3 +188,12 @@ body.mode-employe .espace-logo .logo-mesa { fill: #2A1D14; }
 /* Bouton de thème */
 .theme-bascule { display: none; }
 body.mode-employe .theme-bascule { display: inline-flex; }
+
+/* Compta : tuile « Sorties » cliquable et fenêtre de détail */
+body.mode-employe .tuile-clic { cursor: pointer; transition: border-color .15s, background .15s; }
+body.mode-employe .tuile-clic:hover { border-color: var(--e-primaire); }
+body.mode-employe .tuile-clic:focus-visible { outline: 2px solid var(--e-primaire); outline-offset: 2px; }
+body.mode-employe .tuile-clic .tuile-note { color: var(--e-primaire); }
+.dlg-sorties { width: min(980px, calc(100% - 32px)); }
+.dlg-sorties .sorties-sous-titre { margin: 8px 0 0; font: 600 .95rem/1.2 var(--f-label); }
+.dlg-sorties .tableau-defil { max-height: 46vh; overflow: auto; }

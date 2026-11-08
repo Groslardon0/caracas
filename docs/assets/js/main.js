@@ -3466,6 +3466,45 @@
     return p;
   }
 
+  /* Détail des sorties de la période (tuile « Sorties ») : totaux par nature puis chaque mouvement */
+  let dlgSorties = null;
+  function ouvrirDetailSorties(per, lignes) {
+    if (!dlgSorties) {
+      dlgSorties = el('dialog', 'dlg dlg-devis dlg-rh dlg-sorties');
+      dlgSorties.setAttribute('aria-labelledby', 'so-titre');
+      dlgSorties.addEventListener('click', e => { if (e.target === dlgSorties) dlgSorties.close(); });
+      document.body.append(dlgSorties);
+    }
+    const nature = x => (x.origine === 'Paie' ? 'Salaires' : x.origine === 'Écriture' ? x.categorie : x.origine === 'Dépense' ? 'Dépenses' : x.origine === 'Rachat' ? 'Rachats' : x.origine);
+    const sorties = lignes.filter(x => x.sortie > 0).sort((a, b) => b.date - a.date);
+    const total = sorties.reduce((s, x) => s + x.sortie, 0);
+    const groupes = {};
+    sorties.forEach(x => {
+      const g = groupes[nature(x)] = groupes[nature(x)] || { n: 0, montant: 0, deductible: 0 };
+      g.n += 1;
+      g.montant += x.sortie;
+      g.deductible += x.deductible || 0;
+    });
+    const corps = el('div', 'dlg-corps');
+    const tete = el('div');
+    tete.append(el('p', 'eyebrow', `Comptabilité · ${per.libelle}`), el('h2', 'dlg-titre', `Sorties : ${prix.format(total)}`));
+    tete.querySelector('h2').id = 'so-titre';
+    const resume = tableau(['Nature', 'Mouvements', 'Montant', 'Déductible', 'Part'], Object.entries(groupes).sort((a, b) => b[1].montant - a[1].montant).map(([k, g]) => [
+      k, String(g.n), prix.format(g.montant), prix.format(g.deductible), (total ? Math.round(g.montant / total * 1000) / 10 : 0).toString().replace('.', ',') + ' %',
+    ]), 'Aucune sortie sur la période.');
+    const detail = tableau(['Date', 'Nature', 'Catégorie', 'Libellé', 'Montant', 'Déductible', 'Par'], sorties.map(x => [
+      fmtDate(x.date), nature(x), x.categorie, x.libelle, prix.format(x.sortie), x.deductible ? prix.format(x.deductible) : '—', x.par || '—',
+    ]), 'Aucune sortie sur la période.');
+    const fermer = el('button', 'btn btn-ghost', 'Fermer');
+    fermer.type = 'button';
+    fermer.addEventListener('click', () => dlgSorties.close());
+    const pied = el('div', 'devis-actions');
+    pied.append(fermer);
+    corps.append(tete, el('h3', 'sorties-sous-titre', 'Par nature'), resume, el('h3', 'sorties-sous-titre', 'Détail des mouvements'), detail, pied);
+    dlgSorties.replaceChildren(corps);
+    dlgSorties.showModal();
+  }
+
   function blocsCompta() {
     const blocs = [];
     if (periodeCompta === 'precedente' && !semaineAffichee(periodeSemaine(-1))) periodeCompta = 'semaine';
@@ -3480,9 +3519,16 @@
     blocs.push(el('p', 'calcul-detail paie-periode', `Période : ${per.libelle}. Seules les ventes et contrats validés comptent comme entrées.`));
 
     const tuiles = el('div', 'tuiles');
+    const tSorties = tuile('Sorties', prix.format(t.sortie), `dont ${prix.format(t.deductible)} déductible · voir le détail`);
+    tSorties.classList.add('tuile-clic');
+    tSorties.tabIndex = 0;
+    tSorties.setAttribute('role', 'button');
+    tSorties.setAttribute('aria-label', 'Voir le détail des sorties');
+    tSorties.addEventListener('click', () => ouvrirDetailSorties(per, lignes));
+    tSorties.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ouvrirDetailSorties(per, lignes); } });
     tuiles.append(
       tuile('Entrées', prix.format(t.entree), `${lignes.filter(x => x.entree).length} opération(s)`),
-      tuile('Sorties', prix.format(t.sortie), `dont ${prix.format(t.deductible)} déductible`),
+      tSorties,
       tuile('Résultat', prix.format(t.entree - t.sortie), t.entree - t.sortie >= 0 ? 'Bénéfice' : 'Perte'),
       tuile('Solde de caisse', prix.format(solde), `Au ${new Date().toLocaleDateString('fr-FR')}`),
     );
