@@ -507,11 +507,12 @@
 
   /* Postes du Caracas (commission en % ; responsable = valide les ventes et voit le détail des calculs) */
   /* max = salaire maximum par semaine ; fixe = salaire fixe par semaine (comptable, non commissionné) ;
+     fixeDirection = patron / co-patron : salaire fixe facultatif (0 = taux horaire + commissions), limité au bénéfice restant ;
      cache = compte admin invisible dans les listes d'employés */
   const POSTES = [
     { id: 'admin', nom: 'Admin', commission: 0, taux: 0, max: 0, responsable: true, cache: true },
-    { id: 'patron', nom: 'Patron', commission: 70, taux: 1100, max: 100000, responsable: true },
-    { id: 'copatron', nom: 'Co-patron', commission: 70, taux: 1100, max: 90000, responsable: true },
+    { id: 'patron', nom: 'Patron', commission: 70, taux: 1100, max: 100000, responsable: true, fixe: 0, fixeDirection: true },
+    { id: 'copatron', nom: 'Co-patron', commission: 70, taux: 1100, max: 90000, responsable: true, fixe: 0, fixeDirection: true },
     { id: 'comptable', nom: 'Comptable', commission: 0, taux: 0, fixe: 60000, max: 60000, responsable: true, sansCommission: true },
     { id: 'manager', nom: 'Manager', commission: 60, taux: 950, max: 75000, responsable: true },
     { id: 'vendeur', nom: 'Vendeur', commission: 40, taux: 800, max: 60000 },
@@ -530,7 +531,7 @@
   const etatPostes = () => POSTES.map(p => ({ id: p.id, taux: p.taux, commission: p.commission, max: p.max, fixe: p.fixe }));
   const ICONE_ROUE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
   /* Taux horaire du grade et gain d'un pointage (heures × taux) */
-  const tauxDe = id => (POSTES.find(x => x.id === id) || {}).taux || 0;
+  const tauxDe = id => { const p = POSTES.find(x => x.id === id) || {}; return p.fixe ? 0 : p.taux || 0; };
   /* Seules les 15 premières heures badgées de chaque employé par semaine (lundi → dimanche) sont rémunérées */
   const dureeMs = x => (x.fin || new Date()) - x.debut;
   const msPaye = x => {
@@ -1441,7 +1442,7 @@
     if (ref) return { cout: Math.round(ref.p * PART_COUT_CONCESSION / 100), source: `prix concession (${PART_COUT_CONCESSION} % du neuf)` };
     return { cout: Math.round(prixVente * PART_COUT_CONCESSION / 100), source: `estimé (${PART_COUT_CONCESSION} % du prix)` };
   }
-  const commissionDe = id => (POSTES.find(x => x.id === id) || {}).commission || 0;
+  const commissionDe = id => { const p = POSTES.find(x => x.id === id) || {}; return p.fixe ? 0 : p.commission || 0; };
   /* Calcule la paie de chaque employé sur une période */
   function calculerPaie(per) {
     const dans = d => d >= per.debut && d < per.fin;
@@ -1476,10 +1477,8 @@
     });
     /* Nombre de semaines de la période (salaire fixe et salaire max sont hebdomadaires) */
     const nbSem = per.cle ? 1 : Math.max(1, semainesConnues().filter(p => p.debut >= per.debut && p.debut < per.fin).length);
-    return Object.values(emp).map(f => {
-      f.poste = f.posteEquipe || f.poste || 'vendeur';
+    const finir = f => {
       const P = POSTES.find(p => p.id === f.poste) || {};
-      f.fixe = P.fixe ? P.fixe * nbSem : 0;
       /* Salaire max (CTC art. 40) sur heures + fixe + commissions ; les primes (art. 41) s'ajoutent en plus */
       f.brut = f.salaireHoraire + f.fixe + f.commission;
       f.plafond = P.max ? P.max * nbSem : 0;
@@ -1487,7 +1486,31 @@
       f.total = (f.plafonne ? f.plafond : f.brut) + f.primes;
       f.paye = paiesApercu.find(p => p.cle === per.cle && memeNom(p.nom, f.nom));
       return f;
-    }).filter(f => f.poste !== 'admin').sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+    };
+    const fiches = Object.values(emp).map(f => {
+      f.poste = f.posteEquipe || f.poste || 'vendeur';
+      const P = POSTES.find(p => p.id === f.poste) || {};
+      f.modeFixe = !!P.fixe;
+      f.fixe = P.fixe ? P.fixe * nbSem : 0;
+      return f;
+    }).filter(f => f.poste !== 'admin');
+    /* Patron puis co-patron au fixe : payés en dernier, avec ce qui reste du bénéfice de la période
+       (ventes et recettes − dépenses hors paies et impôts − salaires de tous les autres employés), jamais en négatif */
+    const direction = f => f.modeFixe && (POSTES.find(p => p.id === f.poste) || {}).fixeDirection;
+    fiches.filter(f => !direction(f)).forEach(finir);
+    let reste = caPeriode(per)
+      + ecrituresApercu.filter(x => x.sens === 'entree' && dans(x.date) && !RECETTES_HORS_CA.includes(x.categorie)).reduce((t, x) => t + x.montant, 0)
+      - depensesApercu.filter(x => dans(x.date) && x.lien !== 'paie' && x.lien !== 'impot').reduce((t, x) => t + x.montant, 0)
+      - fiches.filter(f => !direction(f)).reduce((t, f) => t + f.total, 0);
+    const ordre = ['patron', 'copatron'];
+    fiches.filter(direction).sort((a, b) => ordre.indexOf(a.poste) - ordre.indexOf(b.poste) || a.nom.localeCompare(b.nom, 'fr')).forEach(f => {
+      f.fixePrevu = f.fixe;
+      f.fixe = Math.max(0, Math.min(f.fixe, Math.round(reste)));
+      f.fixeLimite = f.fixe < f.fixePrevu;
+      finir(f);
+      reste -= f.total;
+    });
+    return fiches.sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
   }
 
   /* En ligne, l'activité commence le lundi 02/11/2026 : aucune semaine antérieure n'est affichée (paie, impôts, compta, historique).
@@ -1552,9 +1575,9 @@
         rendreEspace('espace-paie');
       });
     }
-    return [nom, (POSTES.find(x => x.id === f.poste) || {}).nom || f.poste, fmtDuree(f.ms), f.fixe ? `${prix.format(f.fixe)} (fixe)` : prix.format(f.salaireHoraire),
+    return [nom, (POSTES.find(x => x.id === f.poste) || {}).nom || f.poste, fmtDuree(f.ms), f.modeFixe ? `${prix.format(f.fixe)} (fixe${f.fixeLimite ? `, limité au bénéfice sur ${prix.format(f.fixePrevu)}` : ''})` : prix.format(f.salaireHoraire),
       String(f.ventes.length) + (f.attente ? ` (+${f.attente} en attente)` : ''), prix.format(f.benefice),
-      f.fixe && !f.commission ? '—' : `${prix.format(f.commission)} (${commissionDe(f.poste)} %)`, f.primes ? prix.format(f.primes) : '—', celluleTotal(f), action, docsPaie(f, per)];
+      f.modeFixe && !f.commission ? '—' : `${prix.format(f.commission)} (${commissionDe(f.poste)} %)`, f.primes ? prix.format(f.primes) : '—', celluleTotal(f), action, docsPaie(f, per)];
   }
   function docsPaie(f, per) {
     const d = el('div', 'actions-ligne');
@@ -1597,7 +1620,7 @@
         const f = fiches.find(x => memeNom(x.nom, identifiant)) || vide();
         t.append(
           tuile('Heures pointées', fmtDuree(f.ms), `${prix.format(tauxDe(f.poste))} / h`),
-          f.fixe ? tuile('Salaire fixe', prix.format(f.fixe), 'Comptable : salaire fixe, non commissionné') : tuile('Salaire horaire', prix.format(f.salaireHoraire), '15 h max / semaine × taux du grade'),
+          f.modeFixe ? tuile('Salaire fixe', prix.format(f.fixe), f.fixeLimite ? `Limité au bénéfice restant (fixe prévu : ${prix.format(f.fixePrevu)})` : 'Salaire fixe, non commissionné') : tuile('Salaire horaire', prix.format(f.salaireHoraire), '15 h max / semaine × taux du grade'),
           tuile('Commissions', prix.format(f.commission), `${commissionDe(f.poste)} % du bénéfice · ${f.ventes.length} vente(s) validée(s)`),
           tuile('Total de la semaine', prix.format(f.total), [f.primes ? `dont ${prix.format(f.primes)} de primes` : '', f.plafonne ? `plafonné au salaire max (${prix.format(f.plafond)})` : '', f.paye ? `payé le ${fmtDate(f.paye.le)}` : 'pas encore payé'].filter(Boolean).join(' · ')),
         );
@@ -1977,7 +2000,7 @@
       taux: champ(p.taux, `Taux horaire ${p.nom}`, p.fixe),
       commission: champ(p.commission, `Commission ${p.nom} (%)`, p.sansCommission),
       max: champ(p.max, `Salaire max ${p.nom}`),
-      fixe: p.fixe ? champ(p.fixe, `Salaire fixe ${p.nom}`) : null,
+      fixe: p.fixe || p.fixeDirection ? champ(p.fixe, `Salaire fixe ${p.nom}`) : null,
     }));
     const msg = el('p', 'form-message');
     msg.setAttribute('role', 'status');
@@ -1991,7 +2014,7 @@
         return;
       }
       entrees.forEach(x => {
-        if (!x.p.fixe) x.p.taux = lire(x.taux);
+        if (!x.p.fixe || x.p.fixeDirection) x.p.taux = lire(x.taux);
         if (!x.p.sansCommission) x.p.commission = lire(x.commission);
         x.p.max = lire(x.max);
         if (x.fixe) x.p.fixe = lire(x.fixe);
@@ -2006,7 +2029,7 @@
     pied.append(msg, b);
     const p = panneauAvec('Rémunération par rôle', tableau(['Rôle', 'Taux horaire ($/h)', 'Commission (%)', 'Salaire max / semaine ($)', 'Salaire fixe / semaine ($)'],
       entrees.map(x => [x.p.nom, x.taux, x.commission, x.max, x.fixe || '—']), ''));
-    p.append(el('p', 'calcul-detail panneau-pied', 'Le salaire max plafonne heures + salaire fixe + commissions de la semaine ; les primes (CTC art. 41) s’ajoutent en plus. Le comptable a un salaire fixe et n’est pas commissionné.'), pied);
+    p.append(el('p', 'calcul-detail panneau-pied', 'Le salaire max plafonne heures + salaire fixe + commissions de la semaine ; les primes (CTC art. 41) s’ajoutent en plus. Le comptable a un salaire fixe et n’est pas commissionné. Patron et co-patron : 0 = taux horaire + commissions ; un salaire fixe remplace les deux et n’est versé qu’avec le bénéfice restant après les salaires des employés (patron d’abord, puis co-patron), pour ne jamais mettre la semaine en négatif.'), pied);
     return p;
   }
 
@@ -4224,7 +4247,7 @@
       ['Heures badgées', fmtDuree(f.ms)],
       [`Heures rémunérées (arrondies à l’heure, CTC 42-3 ; ${SUBVENTION_HEURES} h max)`, fmtDuree(paye)],
       ['Taux horaire du grade', `${prix.format(tauxDe(f.poste))} / h`],
-      [f.fixe ? 'Salaire fixe (comptable)' : 'Salaire horaire', prix.format(f.fixe || f.salaireHoraire)],
+      [f.modeFixe ? 'Salaire fixe' + (f.fixeLimite ? ` (limité au bénéfice, prévu ${prix.format(f.fixePrevu)})` : '') : 'Salaire horaire', prix.format(f.modeFixe ? f.fixe : f.salaireHoraire)],
       [`Commissions (${commissionDe(f.poste)} % du bénéfice des ventes validées)`, prix.format(f.commission)],
       ...(f.primes ? [['Primes', prix.format(f.primes)]] : []),
       ...(f.plafonne ? [[`Plafonné au salaire max du rôle`, prix.format(f.plafond)]] : []),
